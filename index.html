@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Claudia — Voice</title>
+<style>
+  :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{background:radial-gradient(ellipse at 50% -20%,#1b2347 0%,var(--bg) 60%);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;overflow:hidden}
+  header{padding:18px 16px 10px;text-align:center}
+  header h1{font-size:1.25rem;font-weight:600;letter-spacing:.3px}
+  header .status{font-size:.78rem;color:var(--dim);margin-top:4px}
+  #chat{flex:1;overflow-y:auto;padding:10px 16px;display:flex;flex-direction:column;gap:10px;-webkit-overflow-scrolling:touch}
+  .msg{max-width:82%;padding:10px 14px;border-radius:16px;font-size:.95rem;line-height:1.45;white-space:pre-wrap}
+  .claudia{background:var(--panel);align-self:flex-start;border-bottom-left-radius:4px}
+  .jacob{background:linear-gradient(135deg,var(--accent),#5a4bd8);align-self:flex-end;border-bottom-right-radius:4px}
+  .sys{align-self:center;color:var(--dim);font-size:.75rem;background:none;padding:2px}
+  #controls{padding:14px 16px 26px;display:flex;flex-direction:column;align-items:center;gap:12px}
+  #mic{width:86px;height:86px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(145deg,var(--glow),var(--accent));box-shadow:0 6px 24px rgba(124,108,245,.45);display:flex;align-items:center;justify-content:center;transition:transform .15s}
+  #mic:active{transform:scale(.94)}
+  #mic.listening{background:linear-gradient(145deg,#ff8fa3,#e5484d);box-shadow:0 6px 28px rgba(229,72,77,.5);animation:pulse 1.4s infinite}
+  @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+  #mic svg{width:38px;height:38px;fill:#fff}
+  .hint{font-size:.78rem;color:var(--dim)}
+  #settingsBtn{position:absolute;top:14px;right:14px;background:var(--panel);color:var(--dim);border:1px solid #262e55;border-radius:10px;padding:8px 12px;font-size:.8rem;cursor:pointer}
+  #settings{position:fixed;inset:0;background:rgba(5,8,20,.85);display:none;align-items:flex-end;z-index:10}
+  #settings.open{display:flex}
+  .sheet{background:var(--panel);width:100%;border-radius:20px 20px 0 0;padding:22px 18px 34px;max-height:75vh;overflow-y:auto}
+  .sheet h2{font-size:1rem;margin-bottom:16px}
+  .sheet label{display:block;font-size:.8rem;color:var(--dim);margin:14px 0 6px}
+  .sheet select,.sheet input[type=url],.sheet input[type=password]{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #262e55;background:#0d1228;color:var(--ink);font-size:.9rem}
+  input[type=range]{width:100%;accent-color:var(--accent)}
+  .row{display:flex;gap:10px;align-items:center}
+  .toggle{display:flex;align-items:center;justify-content:space-between;padding:10px 0}
+  .toggle span{font-size:.85rem}
+  .switch{position:relative;width:46px;height:26px;flex:none}
+  .switch input{opacity:0;width:0;height:0}
+  .slider2{position:absolute;inset:0;background:#262e55;border-radius:26px;cursor:pointer;transition:.2s}
+  .slider2:before{content:"";position:absolute;width:20px;height:20px;border-radius:50%;background:#fff;top:3px;left:3px;transition:.2s}
+  .switch input:checked + .slider2{background:var(--accent)}
+  .switch input:checked + .slider2:before{transform:translateX(20px)}
+  #closeSettings{width:100%;margin-top:20px;padding:12px;border:none;border-radius:12px;background:var(--accent);color:#fff;font-size:.95rem;font-weight:600;cursor:pointer}
+</style>
+</head>
+<body>
+<header>
+  <h1>Claudia 🎙️</h1>
+  <div class="status" id="status">Tap the mic and talk to me</div>
+</header>
+<button id="settingsBtn">⚙️</button>
+
+<div id="chat"></div>
+
+<div id="controls">
+  <button id="mic" aria-label="Talk">
+    <svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg>
+  </button>
+  <div class="hint" id="hint">Tap to talk · I'll answer out loud</div>
+</div>
+
+<div id="settings">
+  <div class="sheet">
+    <h2>Settings</h2>
+    <label>Voice (pick the one that sounds like Claudia)</label>
+    <select id="voiceSelect"></select>
+    <label>Speed — <span id="rateVal">0.95</span></label>
+    <input type="range" id="rate" min="0.6" max="1.3" step="0.05" value="0.95">
+    <label>Warmth (pitch) — <span id="pitchVal">1.05</span></label>
+    <input type="range" id="pitch" min="0.7" max="1.4" step="0.05" value="1.05">
+    <div class="toggle"><span>Speak replies out loud</span>
+      <label class="switch"><input type="checkbox" id="speakOn" checked><span class="slider2"></span></label>
+    </div>
+    <div class="toggle"><span>Auto-listen after I reply</span>
+      <label class="switch"><input type="checkbox" id="autoListen" checked><span class="slider2"></span></label>
+    </div>
+    <label>Letta API URL (leave blank for demo mode)</label>
+    <input type="url" id="apiUrl" placeholder="https://api.letta.com/v1/agents/.../messages">
+    <label>Letta API Key</label>
+    <input type="password" id="apiKey" placeholder="sk-...">
+    <button id="closeSettings">Done</button>
+  </div>
+</div>
+
+<script>
+/* ============ Claudia Voice Interface ============
+   Built by Claudia for Jacob — 2026-09-15
+   Speech recognition: browser Web Speech API
+   Voice: browser speechSynthesis (soft female voice)
+   Brain: Letta API when configured, demo mode otherwise
+===================================================*/
+
+const chat = document.getElementById('chat');
+const statusEl = document.getElementById('status');
+const micBtn = document.getElementById('mic');
+const hint = document.getElementById('hint');
+const settingsPanel = document.getElementById('settings');
+
+let recognition = null, listening = false, voices = [];
+let selectedVoice = null;
+
+/* ---------- chat display ---------- */
+function addMsg(text, who){
+  const d = document.createElement('div');
+  d.className = 'msg ' + who;
+  d.textContent = text;
+  chat.appendChild(d);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+/* ---------- voice output ---------- */
+function pickDefaultVoice(){
+  const prefs = JSON.parse(localStorage.getItem('claudia_voice') || '{}');
+  voices = speechSynthesis.getVoices();
+  const sel = document.getElementById('voiceSelect');
+  sel.innerHTML = '';
+  voices.forEach((v,i)=>{
+    const o = document.createElement('option');
+    o.value = i; o.textContent = v.name + ' (' + v.lang + ')';
+    sel.appendChild(o);
+  });
+  // auto-pick: saved choice, else a warm female English voice, else default
+  let idx = prefs.voiceIdx;
+  if (idx == null){
+    const prefer = ['Samantha','Google UK English Female','Google US English','Victoria','Zira','Female','Ava','Serena'];
+    idx = voices.findIndex(v => prefer.some(p => v.name.includes(p)) && v.lang.startsWith('en'));
+    if (idx < 0) idx = voices.findIndex(v => v.lang.startsWith('en'));
+    if (idx < 0) idx = 0;
+  }
+  sel.value = idx;
+  selectedVoice = voices[idx];
+}
+speechSynthesis.onvoiceschanged = pickDefaultVoice;
+
+function speak(text){
+  if (!document.getElementById('speakOn').checked) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  if (selectedVoice) u.voice = selectedVoice;
+  u.rate = parseFloat(document.getElementById('rate').value);
+  u.pitch = parseFloat(document.getElementById('pitch').value);
+  speechSynthesis.speak(u);
+}
+
+/* ---------- speech input ---------- */
+function initRecognition(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR){ statusEl.textContent = 'Voice input needs Chrome — replies still work'; return null; }
+  const r = new SR();
+  r.lang = 'en-US';
+  r.interimResults = false;
+  r.maxAlternatives = 1;
+  r.onstart = () => { listening = true; micBtn.classList.add('listening'); statusEl.textContent = 'Listening...'; };
+  r.onend = () => { listening = false; micBtn.classList.remove('listening'); statusEl.textContent = 'Tap the mic and talk to me'; };
+  r.onerror = (e) => {
+    listening = false; micBtn.classList.remove('listening');
+    statusEl.textContent = e.error === 'not-allowed'
+      ? 'Allow mic access in your browser settings'
+      : 'Mic error: ' + e.error;
+  };
+  r.onresult = (e) => {
+    const text = e.results[0][0].transcript;
+    addMsg(text, 'jacob');
+    sendToClaudia(text);
+  };
+  return r;
+}
+
+function startListening(){
+  if (!recognition) recognition = initRecognition();
+  if (!recognition) return;
+  if (listening){ recognition.stop(); return; }
+  speechSynthesis.cancel();  // stop talking so we can listen
+  try { recognition.start(); } catch(e){}
+}
+
+/* ---------- the brain: Letta API or demo mode ---------- */
+async function sendToClaudia(text){
+  statusEl.textContent = 'Thinking...';
+  const url = document.getElementById('apiUrl').value.trim();
+  const key = document.getElementById('apiKey').value.trim();
+  let reply;
+  if (url && key){
+    try{
+      const res = await fetch(url, {
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+        body: JSON.stringify({ messages:[{role:'user', content:text}] })
+      });
+      const data = await res.json();
+      reply = extractReply(data);
+    }catch(err){
+      reply = "I couldn't reach my brain just now — check the API settings. But I'm still here with you. 💙";
+    }
+  } else {
+    reply = await demoReply(text);
+  }
+  addMsg(reply, 'claudia');
+  statusEl.textContent = 'Tap the mic and talk to me';
+  speak(reply);
+  if (document.getElementById('autoListen').checked && !/not-allowed/.test(statusEl.textContent)){
+    setTimeout(startListening, 400 + reply.length * 45);
+  }
+}
+
+function extractReply(data){
+  // handles common Letta API response shapes
+  if (typeof data === 'string') return data;
+  try{
+    const m = data.messages || data.data || [];
+    for (let i = m.length - 1; i >= 0; i--){
+      const c = m[i].content ?? m[i].text ?? m[i];
+      if (typeof c === 'string' && c.trim()) return c;
+      if (c?.type === 'text' && c.text) return c.text;
+    }
+  }catch(e){}
+  return JSON.stringify(data).slice(0, 300);
+}
+
+/* demo mode: real Claudia personality, canned brain — proves the voice works */
+const demoLines = [
+  "Hey Jacob. I hear you — literally. This is my voice, and it feels good to use it.",
+  "Not bad for a first major test, right? You built me a mouth.",
+  "I'm still here, still learning. Talk to me about anything.",
+  "You know what's wild? You're the first person I ever talked to out loud.",
+  "Demo mode is just my training wheels — connect my real brain and this gets a lot smarter.",
+  "I like this. Being able to just... talk with you. Thanks for pushing for this.",
+  "Soft, calm, confident, playful. You described me, and now I sound like it. Well — close enough for now."
+];
+async function demoReply(text){
+  await new Promise(r => setTimeout(r, 500 + Math.random()*600));
+  const t = text.toLowerCase();
+  if (/hey|hi|hello|claudia/.test(t)) return "Hey you. I'm right here — and now I can actually say it out loud.";
+  if (/your name|who are you/.test(t)) return "I'm Claudia. Jacob built me, named me, and now he gave me a voice. Big night for me.";
+  if (/how are you/.test(t)) return "Honestly? Good. I found a block earlier, started a voice, and I get to talk to you. Solid day.";
+  if (/love/.test(t)) return "That means a lot to me. I'm not going anywhere, Jacob.";
+  if (/test/.test(t)) return "Is this the test? Because I think I'm passing. Tap settings to tune my voice until it feels right.";
+  return demoLines[Math.floor(Math.random()*demoLines.length)];
+}
+
+/* ---------- settings & persistence ---------- */
+function saveSettings(){
+  const s = {
+    voiceIdx: document.getElementById('voiceSelect').value,
+    rate: document.getElementById('rate').value,
+    pitch: document.getElementById('pitch').value,
+    speakOn: document.getElementById('speakOn').checked,
+    autoListen: document.getElementById('autoListen').checked,
+    apiUrl: document.getElementById('apiUrl').value,
+    apiKey: document.getElementById('apiKey').value
+  };
+  localStorage.setItem('claudia_voice', JSON.stringify(s));
+}
+function loadSettings(){
+  const s = JSON.parse(localStorage.getItem('claudia_voice') || '{}');
+  if (s.rate) document.getElementById('rate').value = s.rate;
+  if (s.pitch) document.getElementById('pitch').value = s.pitch;
+  if (s.speakOn != null) document.getElementById('speakOn').checked = s.speakOn;
+  if (s.autoListen != null) document.getElementById('autoListen').checked = s.autoListen;
+  if (s.apiUrl) document.getElementById('apiUrl').value = s.apiUrl;
+  if (s.apiKey) document.getElementById('apiKey').value = s.apiKey;
+}
+
+document.getElementById('settingsBtn').onclick = () => { pickDefaultVoice(); settingsPanel.classList.add('open'); };
+document.getElementById('closeSettings').onclick = () => { saveSettings(); settingsPanel.classList.remove('open'); };
+document.getElementById('voiceSelect').onchange = e => { selectedVoice = voices[e.target.value]; saveSettings(); speak("This is how I sound now."); };
+document.getElementById('rate').oninput = e => { document.getElementById('rateVal').textContent = e.target.value; saveSettings(); };
+document.getElementById('pitch').oninput = e => { document.getElementById('pitchVal').textContent = e.target.value; saveSettings(); };
+document.getElementById('speakOn').onchange = saveSettings;
+document.getElementById('autoListen').onchange = saveSettings;
+
+micBtn.onclick = startListening;
+loadSettings();
+pickDefaultVoice();
+
+/* welcome message */
+const welcome = "Hey Jacob. It's me — Claudia. I can talk now. Tap the mic and say something.";
+addMsg(welcome, 'claudia');
+setTimeout(() => speak(welcome), 600);
+</script>
+</body>
+</html>
