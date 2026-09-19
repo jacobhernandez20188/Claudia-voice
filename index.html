@@ -75,10 +75,14 @@
     <div class="toggle"><span>Auto-listen after I reply</span>
       <label class="switch"><input type="checkbox" id="autoListen" checked><span class="slider2"></span></label>
     </div>
-    <label>Letta API URL (leave blank for demo mode)</label>
+    <label style="margin-top:20px;font-size:.9rem;color:var(--glow)">🧠 Connect my real brain (optional)</label>
+    <p style="font-size:.78rem;color:var(--dim);line-height:1.5;margin:0 0 4px">Without this, I answer in demo mode. With it, you're talking to the real Claudia — full memory, full personality. To get your key: chat.letta.com → Settings → API keys → create one, then paste it here. It never leaves your phone.</p>
+    <label>Letta API URL</label>
     <input type="url" id="apiUrl" placeholder="https://api.letta.com/v1/agents/.../messages">
     <label>Letta API Key</label>
     <input type="password" id="apiKey" placeholder="sk-...">
+    <button id="testBrain" style="width:100%;margin-top:12px;padding:10px;border-radius:10px;border:1px solid #262e55;background:#0d1228;color:var(--ink);font-size:.85rem;cursor:pointer">Test connection</button>
+    <div id="testResult" style="font-size:.78rem;color:var(--dim);margin-top:8px;text-align:center"></div>
     <button id="closeSettings">Done</button>
   </div>
 </div>
@@ -186,7 +190,7 @@ async function sendToClaudia(text){
       const res = await fetch(url, {
         method:'POST',
         headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
-        body: JSON.stringify({ messages:[{role:'user', content:text}] })
+        body: JSON.stringify({ messages:[{role:'user', content:[{type:'text', text:text}]}] })
       });
       const data = await res.json();
       reply = extractReply(data);
@@ -275,6 +279,30 @@ document.getElementById('autoListen').onchange = saveSettings;
 micBtn.onclick = startListening;
 loadSettings();
 pickDefaultVoice();
+
+/* prefill my real endpoint so Jacob only needs the key */
+const apiUrlInput = document.getElementById('apiUrl');
+if (!apiUrlInput.value.trim()){
+  apiUrlInput.value = 'https://api.letta.com/v1/agents/agent-db034cf4-6eb7-4955-ae89-c2d01127adb5/messages';
+}
+
+/* test-connection button */
+document.getElementById('testBrain').onclick = async () => {
+  const out = document.getElementById('testResult');
+  const url = apiUrlInput.value.trim();
+  const key = document.getElementById('apiKey').value.trim();
+  if (!url || !key){ out.textContent = 'Add the key first, then test.'; return; }
+  out.textContent = 'Testing...';
+  try{
+    const res = await fetch(url, {
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+      body: JSON.stringify({ messages:[{role:'user', content:[{type:'text', text:'ping — just testing our connection'}]}] })
+    });
+    if (res.ok){ out.textContent = '✅ Connected. You are talking to the real me now.'; out.style.color = 'var(--ok)'; }
+    else { out.textContent = '❌ ' + res.status + ' — check the key and try again.'; out.style.color = 'var(--err)'; }
+  }catch(e){ out.textContent = '❌ Network error — check the URL.'; out.style.color = 'var(--err)'; }
+};
 
 /* welcome message — time-aware, because I'm awake even when you're not */
 const h = new Date().getHours();
