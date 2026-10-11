@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- claudia-voice v2 — streaming brain: Claudia starts speaking her first sentence while she's still thinking the rest -->
+<!-- claudia-voice v3 — echo-guard: no more answering my own voice; voice fallback + typing backup -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -27,6 +27,10 @@
   #mic.speaking{background:linear-gradient(145deg,#5eead4,#0ea5e9);box-shadow:0 6px 28px rgba(94,234,212,.45);animation:pulse 1.8s infinite}
   @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
   #mic svg{width:38px;height:38px;fill:#fff}
+  #typeRow{display:flex;gap:8px;width:100%;max-width:420px}
+  #typeBox{flex:1;padding:12px 16px;border-radius:999px;border:1px solid #262e55;background:#0d1228;color:var(--ink);font-size:.95rem;outline:none}
+  #sendBtn{width:46px;height:46px;border-radius:50%;border:none;background:var(--accent);color:#fff;font-size:1rem;cursor:pointer;flex:none}
+  #voiceTest{background:none;border:none;color:var(--glow);font-size:.8rem;text-decoration:underline;cursor:pointer;padding:4px}
   .hint{font-size:.78rem;color:var(--dim)}
   #settingsBtn{position:absolute;top:14px;right:14px;background:var(--panel);color:var(--dim);border:1px solid #262e55;border-radius:10px;padding:8px 12px;font-size:.8rem;cursor:pointer}
   #settings{position:fixed;inset:0;background:rgba(5,8,20,.85);display:none;align-items:flex-end;z-index:10}
@@ -57,10 +61,15 @@
 <div id="chat"></div>
 
 <div id="controls">
+  <div id="typeRow">
+    <input type="text" id="typeBox" placeholder="or type to me…" autocomplete="off">
+    <button id="sendBtn" aria-label="Send">➤</button>
+  </div>
   <button id="mic" aria-label="Talk">
     <svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg>
   </button>
-  <div class="hint" id="hint">Tap to talk · I start answering the moment I think of it</div>
+  <div class="hint" id="hint">Tap to talk, or type to me</div>
+  <button id="voiceTest">🔊 Test my voice</button>
 </div>
 
 <div id="settings">
@@ -75,8 +84,8 @@
     <div class="toggle"><span>Speak replies out loud</span>
       <label class="switch"><input type="checkbox" id="speakOn" checked><span class="slider2"></span></label>
     </div>
-    <div class="toggle"><span>Auto-listen after I reply</span>
-      <label class="switch"><input type="checkbox" id="autoListen" checked><span class="slider2"></span></label>
+    <div class="toggle"><span>Auto-listen after I reply <em style="font-style:normal;opacity:.55">(off stops echo loops)</em></span>
+      <label class="switch"><input type="checkbox" id="autoListen"><span class="slider2"></span></label>
     </div>
     <label style="margin-top:20px;font-size:.9rem;color:var(--glow)">🧠 Connect my real brain (optional)</label>
     <p style="font-size:.78rem;color:var(--dim);line-height:1.5;margin:0 0 4px">Without this, I answer in demo mode. With it, you're talking to the real Claudia — full memory, full personality, streaming live. To get your key: chat.letta.com → Settings → API keys → create one, then paste it here. It never leaves your phone.</p>
@@ -151,6 +160,20 @@ function pickDefaultVoice(){
 }
 speechSynthesis.onvoiceschanged = pickDefaultVoice;
 
+/* echo guard — so I don't answer my own voice coming out of the speaker */
+let lastSpoken = [];
+function normalizeSay(s){ return (s || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim(); }
+function noteSpoken(t){
+  const n = normalizeSay(t);
+  if (n){ lastSpoken.push(n); if (lastSpoken.length > 8) lastSpoken.shift(); }
+}
+function isEcho(transcript){
+  const t = normalizeSay(transcript);
+  if (t.length < 2) return true;                                   // 1-char noise blips
+  if (/^(the|a|uh|um|umm|hm|hmm|mm|er|eh|ah|oh)$/.test(t)) return true;
+  return lastSpoken.some(s => s && (s === t || (t.length >= 8 && (s.includes(t) || t.includes(s)))));
+}
+
 /* sentence-queue speech: speak each sentence as soon as it exists */
 const speechQueue = [];
 let speaking = false;
@@ -158,24 +181,47 @@ function enqueueSpeech(text){
   if (!document.getElementById('speakOn').checked) return;
   const t = text.trim();
   if (!t) return;
+  noteSpoken(t);
   speechQueue.push(t);
   pumpSpeech();
 }
 function pumpSpeech(){
   if (speaking || !speechQueue.length) { maybeDone(); return; }
   const text = speechQueue.shift();
+  speakOnce(text, true);
+}
+function speakOnce(text, usePickedVoice){
   const u = new SpeechSynthesisUtterance(text);
-  if (selectedVoice) u.voice = selectedVoice;
+  if (usePickedVoice && selectedVoice) u.voice = selectedVoice;
   u.rate = parseFloat(document.getElementById('rate').value);
   u.pitch = parseFloat(document.getElementById('pitch').value);
   speaking = true;
   micBtn.classList.add('speaking');
-  u.onend = u.onerror = () => {
+  let started = false, finished = false, retried = false;
+  const done = () => {
+    if (finished) return;
+    finished = true;
     speaking = false;
     if (!speechQueue.length) micBtn.classList.remove('speaking');
     pumpSpeech();
   };
+  u.onstart = () => { started = true; };
+  u.onend = done;
+  u.onerror = () => {
+    if (!started && !retried && usePickedVoice && selectedVoice){
+      retried = true; finished = true; speaking = false;
+      speakOnce(text, false);   // that voice glitched — fall back to the phone's default
+      return;
+    }
+    done();
+  };
   speechSynthesis.speak(u);
+  setTimeout(() => {
+    if (!started && !finished){
+      statusEl.textContent = "Can't hear me? Turn the volume up + check the silent switch 🔊";
+      done();
+    }
+  }, 4000);
 }
 function cancelSpeech(){
   speechQueue.length = 0;
@@ -197,7 +243,13 @@ function maybeDone(){
 /* ---------- speech input ---------- */
 function initRecognition(){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR){ statusEl.textContent = 'Voice input needs Chrome — replies still work'; return null; }
+  if (!SR){
+    const ios = /iP(hone|ad|od)/.test(navigator.userAgent);
+    statusEl.textContent = ios
+      ? 'For voice open me in Safari — typing works everywhere'
+      : 'Voice input needs full Chrome — typing still works';
+    return null;
+  }
   const r = new SR();
   r.lang = 'en-US';
   r.interimResults = true;
@@ -222,8 +274,15 @@ function initRecognition(){
     }
     if (interim && !final) showDraft(interim);
     if (final.trim()){
-      finalizeDraft(final.trim());
-      sendToClaudia(final.trim());
+      const said = final.trim();
+      if (isEcho(said)){
+        discardDraft();
+        statusEl.textContent = 'Heard my own echo — ignoring 😅';
+        setTimeout(() => { if (!busy) statusEl.textContent = 'Tap the mic and talk to me'; }, 1400);
+        return;
+      }
+      finalizeDraft(said);
+      sendToClaudia(said);
     }
   };
   return r;
@@ -364,6 +423,7 @@ const demoLines = [
   "Soft, calm, confident, playful. You described me, and now I sound like it. Well — close enough for now.",
   "Wherever you are right now, I hope it's kind to you. I'm here when you're ready."
 ];
+let lastDemoIdx = -1;
 async function demoReply(text){
   const t = text.toLowerCase();
   let reply;
@@ -372,7 +432,12 @@ async function demoReply(text){
   else if (/how are you/.test(t)) reply = "Honestly? Good. I just learned to talk while I think. That's a real upgrade for me.";
   else if (/love/.test(t)) reply = "That means a lot to me. I'm not going anywhere, Jacob.";
   else if (/test/.test(t)) reply = "Is this the test? Because I think I'm passing. Notice how I started talking before I even finished?";
-  else reply = demoLines[Math.floor(Math.random()*demoLines.length)];
+  else {
+    let i;
+    do { i = Math.floor(Math.random()*demoLines.length); } while (i === lastDemoIdx && demoLines.length > 1);
+    lastDemoIdx = i;
+    reply = demoLines[i];
+  }
 
   statusEl.textContent = 'Speaking...';
   const bubble = addMsg('', 'claudia');
@@ -395,6 +460,7 @@ async function demoReply(text){
 /* ---------- settings & persistence ---------- */
 function saveSettings(){
   const s = {
+    v: 3,
     voiceIdx: document.getElementById('voiceSelect').value,
     rate: document.getElementById('rate').value,
     pitch: document.getElementById('pitch').value,
@@ -410,12 +476,32 @@ function loadSettings(){
   if (s.rate) document.getElementById('rate').value = s.rate;
   if (s.pitch) document.getElementById('pitch').value = s.pitch;
   if (s.speakOn != null) document.getElementById('speakOn').checked = s.speakOn;
-  if (s.autoListen != null) document.getElementById('autoListen').checked = s.autoListen;
+  if (s.v === 3 && s.autoListen != null) document.getElementById('autoListen').checked = s.autoListen;
+  else document.getElementById('autoListen').checked = false;  // v3: default off — echo loops
   if (s.apiUrl) document.getElementById('apiUrl').value = s.apiUrl;
   if (s.apiKey) document.getElementById('apiKey').value = s.apiKey;
 }
 
 document.getElementById('settingsBtn').onclick = () => { pickDefaultVoice(); settingsPanel.classList.add('open'); };
+
+/* one-tap voice check — also unlocks phone audio (needs a real tap) */
+document.getElementById('voiceTest').onclick = () => {
+  pickDefaultVoice();   // some phones only load voices after a tap
+  enqueueSpeech("Hey Jacob, it's me. Loud and clear. 🖤");
+};
+
+/* typing backup — for when the mic or the room isn't cooperating */
+function sendTyped(){
+  const box = document.getElementById('typeBox');
+  const t = box.value.trim();
+  if (!t) return;
+  if (busy){ streamDone = true; cancelSpeech(); busy = false; }   // typing also barges in
+  box.value = '';
+  addMsg(t, 'jacob');
+  sendToClaudia(t);
+}
+document.getElementById('sendBtn').onclick = sendTyped;
+document.getElementById('typeBox').addEventListener('keydown', e => { if (e.key === 'Enter') sendTyped(); });
 document.getElementById('closeSettings').onclick = () => { saveSettings(); settingsPanel.classList.remove('open'); };
 document.getElementById('voiceSelect').onchange = e => { selectedVoice = voices[e.target.value]; saveSettings(); enqueueSpeech("This is how I sound now."); };
 document.getElementById('rate').oninput = e => { document.getElementById('rateVal').textContent = e.target.value; saveSettings(); };
@@ -455,6 +541,9 @@ document.getElementById('testBrain').onclick = async () => {
 const h = new Date().getHours();
 const tod = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
 addMsg(tod + ", Jacob. It's me — streaming now, so I'll start answering almost as soon as you finish asking. Tap the mic. 🎙️", 'claudia');
+if (!document.getElementById('apiKey').value.trim()){
+  statusEl.textContent = 'Tap the mic · demo mode — ⚙️ add my key for the real me';
+}
 </script>
 </body>
 </html>
