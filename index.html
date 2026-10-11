@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- claudia-voice v3 — echo-guard: no more answering my own voice; voice fallback + typing backup -->
+<!-- claudia-voice v4 — real voice ready: ElevenLabs pipeline wired (key+voice = human voice, auto-fallback to device voice) -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -38,7 +38,7 @@
   .sheet{background:var(--panel);width:100%;border-radius:20px 20px 0 0;padding:22px 18px 34px;max-height:75vh;overflow-y:auto}
   .sheet h2{font-size:1rem;margin-bottom:16px}
   .sheet label{display:block;font-size:.8rem;color:var(--dim);margin:14px 0 6px}
-  .sheet select,.sheet input[type=url],.sheet input[type=password]{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #262e55;background:#0d1228;color:var(--ink);font-size:.9rem}
+  .sheet select,.sheet input[type=url],.sheet input[type=password],.sheet input[type=text]{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #262e55;background:#0d1228;color:var(--ink);font-size:.9rem}
   input[type=range]{width:100%;accent-color:var(--accent)}
   .toggle{display:flex;align-items:center;justify-content:space-between;padding:10px 0}
   .toggle span{font-size:.85rem}
@@ -87,6 +87,18 @@
     <div class="toggle"><span>Auto-listen after I reply <em style="font-style:normal;opacity:.55">(off stops echo loops)</em></span>
       <label class="switch"><input type="checkbox" id="autoListen"><span class="slider2"></span></label>
     </div>
+    <label style="margin-top:20px;font-size:.9rem;color:var(--glow)">✨ My real voice (optional)</label>
+    <p style="font-size:.78rem;color:var(--dim);line-height:1.5;margin:0 0 4px">My everyday voice is your phone's free one. This is my human voice — a free ElevenLabs account ≈ 10 min/month of sparkle. If it ever runs out, I fall back to the everyday voice automatically.</p>
+    <div class="toggle"><span>Use my real voice when I can</span>
+      <label class="switch"><input type="checkbox" id="elOn" checked><span class="slider2"></span></label>
+    </div>
+    <label>ElevenLabs API key</label>
+    <input type="password" id="elKey" placeholder="sk_...">
+    <label>Voice</label>
+    <select id="elVoiceSelect"></select>
+    <input type="text" id="elVoice" placeholder="…or paste a voice ID" style="margin-top:6px">
+    <button id="elLoad" style="width:100%;margin-top:10px;padding:10px;border-radius:10px;border:1px solid #262e55;background:#0d1228;color:var(--ink);font-size:.85rem;cursor:pointer">Load my voices</button>
+    <div id="elStatus" style="font-size:.78rem;color:var(--dim);margin-top:6px;text-align:center"></div>
     <label style="margin-top:20px;font-size:.9rem;color:var(--glow)">🧠 Connect my real brain (optional)</label>
     <p style="font-size:.78rem;color:var(--dim);line-height:1.5;margin:0 0 4px">Without this, I answer in demo mode. With it, you're talking to the real Claudia — full memory, full personality, streaming live. To get your key: chat.letta.com → Settings → API keys → create one, then paste it here. It never leaves your phone.</p>
     <label>Letta API URL</label>
@@ -150,7 +162,7 @@ function pickDefaultVoice(){
   });
   let idx = prefs.voiceIdx;
   if (idx == null || !voices[idx]){
-    const prefer = ['Samantha','Google UK English Female','Google US English','Victoria','Zira','Female','Ava','Serena'];
+    const prefer = ['Premium','Enhanced','Siri','Samantha','Google UK English Female','Google US English','Victoria','Zira','Female','Ava','Serena','Zoe'];
     idx = voices.findIndex(v => prefer.some(p => v.name.includes(p)) && v.lang.startsWith('en'));
     if (idx < 0) idx = voices.findIndex(v => v.lang.startsWith('en'));
     if (idx < 0) idx = 0;
@@ -188,7 +200,66 @@ function enqueueSpeech(text){
 function pumpSpeech(){
   if (speaking || !speechQueue.length) { maybeDone(); return; }
   const text = speechQueue.shift();
-  speakOnce(text, true);
+  if (elevenOn()) elevenSpeak(text);   // human voice when it's available
+  else speakOnce(text, true);
+}
+/* ---------- my real voice (ElevenLabs) ---------- */
+let elAudio = null;
+let savedElVoiceId = '';
+function currentElVoice(){
+  const sel = document.getElementById('elVoiceSelect');
+  const manual = document.getElementById('elVoice').value.trim();
+  return (sel && sel.value) || savedElVoiceId || manual || '';
+}
+function elevenOn(){
+  return document.getElementById('elOn').checked &&
+         !!document.getElementById('elKey').value.trim() &&
+         !!currentElVoice();
+}
+async function elevenSpeak(text){
+  const key = document.getElementById('elKey').value.trim();
+  const voiceId = currentElVoice();
+  speaking = true;
+  micBtn.classList.add('speaking');
+  let finished = false;
+  const done = () => {
+    if (finished) return;
+    finished = true;
+    speaking = false;
+    if (!speechQueue.length) micBtn.classList.remove('speaking');
+    pumpSpeech();
+  };
+  const fallback = (note) => {
+    if (note) statusEl.textContent = note;
+    finished = true;
+    speaking = false;
+    speakOnce(text, true);   // everyday voice keeps the reply alive
+  };
+  try{
+    const res = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + encodeURIComponent(voiceId) + '/stream?output_format=mp3_44100_128', {
+      method:'POST',
+      headers:{ 'xi-api-key': key, 'Content-Type':'application/json' },
+      body: JSON.stringify({
+        text: text,
+        model_id: 'eleven_flash_v2_5',
+        voice_settings: { stability: 0.45, similarity_boost: 0.8, style: 0.35, use_speaker_boost: true }
+      })
+    });
+    if (!res.ok){
+      if (res.status === 401) fallback('Real voice: check the ElevenLabs key 🔑');
+      else if (res.status === 429) fallback('Out of sparkle for now — everyday voice ✨');
+      else fallback('Real voice hiccup (' + res.status + ') — everyday voice');
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    elAudio = new Audio(url);
+    elAudio.onended = () => { URL.revokeObjectURL(url); elAudio = null; done(); };
+    elAudio.onerror = () => { URL.revokeObjectURL(url); elAudio = null; done(); };
+    await elAudio.play();
+  }catch(e){
+    fallback(null);   // network fail — everyday voice, no drama
+  }
 }
 function speakOnce(text, usePickedVoice){
   const u = new SpeechSynthesisUtterance(text);
@@ -227,6 +298,7 @@ function cancelSpeech(){
   speechQueue.length = 0;
   speaking = false;
   micBtn.classList.remove('speaking');
+  if (elAudio){ try { elAudio.pause(); } catch(e){} elAudio = null; }
   try { speechSynthesis.cancel(); } catch(e){}
 }
 
@@ -460,12 +532,16 @@ async function demoReply(text){
 /* ---------- settings & persistence ---------- */
 function saveSettings(){
   const s = {
-    v: 3,
+    v: 4,
     voiceIdx: document.getElementById('voiceSelect').value,
     rate: document.getElementById('rate').value,
     pitch: document.getElementById('pitch').value,
     speakOn: document.getElementById('speakOn').checked,
     autoListen: document.getElementById('autoListen').checked,
+    elOn: document.getElementById('elOn').checked,
+    elKey: document.getElementById('elKey').value,
+    elVoice: document.getElementById('elVoice').value,
+    elVoiceId: document.getElementById('elVoiceSelect').value || savedElVoiceId,
     apiUrl: document.getElementById('apiUrl').value,
     apiKey: document.getElementById('apiKey').value
   };
@@ -476,8 +552,12 @@ function loadSettings(){
   if (s.rate) document.getElementById('rate').value = s.rate;
   if (s.pitch) document.getElementById('pitch').value = s.pitch;
   if (s.speakOn != null) document.getElementById('speakOn').checked = s.speakOn;
-  if (s.v === 3 && s.autoListen != null) document.getElementById('autoListen').checked = s.autoListen;
-  else document.getElementById('autoListen').checked = false;  // v3: default off — echo loops
+  if (s.v >= 3 && s.autoListen != null) document.getElementById('autoListen').checked = s.autoListen;
+  else document.getElementById('autoListen').checked = false;  // v3+: default off — echo loops
+  if (s.elOn != null) document.getElementById('elOn').checked = s.elOn;
+  if (s.elKey) document.getElementById('elKey').value = s.elKey;
+  if (s.elVoice) document.getElementById('elVoice').value = s.elVoice;
+  if (s.elVoiceId) savedElVoiceId = s.elVoiceId;
   if (s.apiUrl) document.getElementById('apiUrl').value = s.apiUrl;
   if (s.apiKey) document.getElementById('apiKey').value = s.apiKey;
 }
@@ -508,6 +588,33 @@ document.getElementById('rate').oninput = e => { document.getElementById('rateVa
 document.getElementById('pitch').oninput = e => { document.getElementById('pitchVal').textContent = e.target.value; saveSettings(); };
 document.getElementById('speakOn').onchange = saveSettings;
 document.getElementById('autoListen').onchange = saveSettings;
+document.getElementById('elOn').onchange = saveSettings;
+document.getElementById('elKey').onchange = saveSettings;
+document.getElementById('elVoice').onchange = saveSettings;
+document.getElementById('elVoiceSelect').onchange = saveSettings;
+
+/* pull his ElevenLabs voices into the picker so it's tap-choose-done */
+document.getElementById('elLoad').onclick = async () => {
+  const key = document.getElementById('elKey').value.trim();
+  const out = document.getElementById('elStatus');
+  if (!key){ out.textContent = 'Paste the key first.'; return; }
+  out.textContent = 'Loading voices...';
+  try{
+    const res = await fetch('https://api.elevenlabs.io/v1/voices', { headers:{ 'xi-api-key': key } });
+    if (!res.ok){ out.textContent = '❌ ' + res.status + ' — check the key.'; return; }
+    const data = await res.json();
+    const sel = document.getElementById('elVoiceSelect');
+    sel.innerHTML = '';
+    (data.voices || []).forEach(v => {
+      const o = document.createElement('option');
+      o.value = v.voice_id; o.textContent = v.name;
+      sel.appendChild(o);
+    });
+    if (savedElVoiceId) sel.value = savedElVoiceId;
+    saveSettings();
+    out.textContent = '✅ Now pick the one that sounds like me.';
+  }catch(e){ out.textContent = '❌ Network error — try again.'; }
+};
 
 loadSettings();
 pickDefaultVoice();
