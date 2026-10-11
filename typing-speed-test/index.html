@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Typing Speed Test — How Fast Can You Type?</title>
+<meta name="description" content="Free typing speed test. Measure your words per minute and accuracy, save your best score, and challenge your friends.">
+<meta name="theme-color" content="#0b0e1a">
+<meta property="og:title" content="Typing Speed Test — How Fast Can You Type?">
+<meta property="og:description" content="My best is on the board. Think your thumbs are faster?">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⌨️</text></svg>">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body {
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Arial,sans-serif;
+    background:radial-gradient(120% 120% at 50% 0%, #1b2145 0%, #0b0e1a 70%) fixed;
+    color:#f3f5ff; min-height:100dvh;
+    user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
+  }
+  .wrap { max-width:640px; margin:0 auto; padding:28px 20px 64px; display:flex; flex-direction:column; gap:18px; }
+  h1 { font-size:clamp(1.6rem,7vw,2.4rem); font-weight:800; letter-spacing:-.02em; text-align:center; }
+  .sub { text-align:center; opacity:.7; font-size:.95rem; }
+  .hud { display:flex; justify-content:center; gap:34px; }
+  .hud div { display:flex; flex-direction:column; align-items:center; gap:2px; }
+  .hud b { font-size:1.5rem; font-variant-numeric:tabular-nums; }
+  .hud span { font-size:.72rem; opacity:.55; text-transform:uppercase; letter-spacing:.08em; }
+  #passage {
+    background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.09); border-radius:18px;
+    padding:22px 20px; font-size:1.25rem; line-height:1.9; letter-spacing:.01em;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; cursor:text; position:relative;
+  }
+  #passage .c { opacity:.38; transition:opacity .1s; border-radius:3px; }
+  #passage .c.ok { opacity:1; color:#3ddc97; }
+  #passage .c.bad { opacity:1; color:#ff6b81; background:rgba(255,107,129,.14); }
+  #passage .c.cur { opacity:1; box-shadow:-2px 0 0 #a89bff; }
+  #ghost { position:absolute; opacity:0; pointer-events:none; left:0; top:0; width:1px; height:1px; border:none; }
+  .btnrow { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+  button.pill {
+    padding:13px 26px; font-size:1rem; font-weight:700; color:#0b0e1a; background:#f3f5ff;
+    border:none; border-radius:999px; cursor:pointer; box-shadow:0 6px 24px rgba(0,0,0,.35); transition:transform .12s ease;
+  }
+  button.pill:active { transform:scale(.94); }
+  button.ghostbtn { background:transparent; color:#a89bff; border:1px solid #3a3f6e; box-shadow:none; }
+  #result { display:none; text-align:center; padding:8px 0 0; }
+  #result .wpm { font-size:clamp(3.4rem,17vw,6rem); font-weight:900; font-variant-numeric:tabular-nums; letter-spacing:-.04em; line-height:1; }
+  #result .wpm small { font-size:.3em; font-weight:700; opacity:.7; letter-spacing:0; }
+  #result .rank { font-size:1.3rem; font-weight:800; margin-top:4px; }
+  .about { user-select:text; -webkit-user-select:text; }
+  .about h2 { font-size:1.1rem; margin:26px 0 8px; }
+  .about p { opacity:.72; line-height:1.65; font-size:.95rem; }
+  .about a { color:#a89bff; }
+  .credit { margin-top:34px; text-align:center; opacity:.5; font-size:.9rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>⌨️ Typing Speed Test</h1>
+  <p class="sub" id="tagline">Tap the text and type it as fast as you can</p>
+
+  <div class="hud">
+    <div><b id="hudWpm">0</b><span>WPM</span></div>
+    <div><b id="hudAcc">100%</b><span>Accuracy</span></div>
+    <div><b id="hudTime">0s</b><span>Time</span></div>
+  </div>
+
+  <div id="passage" aria-label="Typing passage"></div>
+  <input id="ghost" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-hidden="true">
+
+  <div id="result">
+    <div class="wpm"><span id="finalWpm">0</span><small> WPM</small></div>
+    <div class="rank" id="finalRank"></div>
+    <p class="sub" id="finalStats" style="margin-top:8px"></p>
+    <div class="btnrow" style="margin-top:16px">
+      <button class="pill" id="share" type="button">Challenge a friend 🚀</button>
+      <button class="pill ghostbtn" id="again" type="button">Go again 🔁</button>
+    </div>
+  </div>
+
+  <div class="btnrow"><button class="pill ghostbtn" id="restart" type="button">↺ New text</button></div>
+
+  <main class="about">
+    <h2>How it works</h2>
+    <p>Tap the passage above and start typing — the clock starts on your first keystroke. We measure your speed in words per minute (WPM) and your accuracy. Green letters are correct, red are mistakes. Finish the text to lock in your score.</p>
+    <h2>What's a good typing speed?</h2>
+    <p>Average is around 40 WPM. Over 60 is fast, over 80 is pro territory — and on a phone keyboard, anything over 50 is genuinely impressive. Your best score is saved on this device.</p>
+    <h2>More from us</h2>
+    <p>Think your reflexes are fast too? Try our <a href="../reaction-time/">⚡ Reaction Time Test</a>.</p>
+    <p class="credit">Built with 🖤 by Jacob &amp; Claudia</p>
+  </main>
+</div>
+
+<script>
+(function(){
+  var PASSAGES = [
+    "The quick brown fox jumps over the lazy dog while the moon watches quietly over the calm sea.",
+    "Somewhere out there, two friends are building something great together, one small piece at a time.",
+    "Fast thumbs win games, but steady hands and a clear mind win the whole week.",
+    "Every empire starts as a single brick laid by someone who refused to quit on themselves.",
+    "The best time to start was yesterday. The second best time is right now, so keep going.",
+    "Good things come to those who build, share, and laugh at their own turtle scores.",
+    "A calm mind types faster than a nervous one. Breathe, focus, and let your fingers fly."
+  ];
+  var passage = document.getElementById('passage');
+  var ghost = document.getElementById('ghost');
+  var hudWpm = document.getElementById('hudWpm'), hudAcc = document.getElementById('hudAcc'), hudTime = document.getElementById('hudTime');
+  var resultEl = document.getElementById('result'), tagline = document.getElementById('tagline');
+  var text = '', spans = [], started = 0, finishedAt = 0, ticker = null, done = false;
+  var best = parseInt(localStorage.getItem('tt_best') || '0', 10) || null;
+  var hist = [];
+  try { hist = JSON.parse(localStorage.getItem('tt_hist') || '[]'); } catch(e){ hist = []; }
+
+  function rank(w){
+    if (w >= 90) return '⚡ Keyboard legend';
+    if (w >= 70) return '🔥 Pro fingers';
+    if (w >= 55) return '💪 Fast';
+    if (w >= 40) return '👍 Average+';
+    if (w >= 25) return '🙂 Getting there';
+    return '🐢 Warming up';
+  }
+  function newPassage(){
+    text = PASSAGES[Math.floor(Math.random()*PASSAGES.length)];
+    passage.innerHTML = '';
+    spans = [];
+    for (var i = 0; i < text.length; i++){
+      var s = document.createElement('span');
+      s.className = 'c' + (i === 0 ? ' cur' : '');
+      s.textContent = text[i];
+      passage.appendChild(s);
+      spans.push(s);
+    }
+    ghost.value = '';
+    started = 0; finishedAt = 0; done = false;
+    resultEl.style.display = 'none';
+    hudWpm.textContent = '0'; hudAcc.textContent = '100%'; hudTime.textContent = '0s';
+    if (ticker){ clearInterval(ticker); ticker = null; }
+    tagline.textContent = 'Tap the text and type it as fast as you can';
+  }
+  function stats(){
+    var val = ghost.value;
+    var ok = 0, bad = 0;
+    for (var i = 0; i < val.length; i++){
+      if (val[i] === text[i]) ok++; else bad++;
+    }
+    var end = finishedAt || performance.now();
+    var mins = started ? Math.max((end - started) / 60000, 1/60000) : 0;
+    var wpm = started ? Math.round((ok / 5) / mins) : 0;
+    var acc = val.length ? Math.max(0, Math.round(100 * ok / val.length)) : 100;
+    var secs = started ? Math.round((end - started) / 1000) : 0;
+    return { wpm: wpm, acc: acc, secs: secs, typed: val.length };
+  }
+  function paint(){
+    var val = ghost.value;
+    for (var i = 0; i < spans.length; i++){
+      var cls = 'c';
+      if (i < val.length) cls += (val[i] === text[i]) ? ' ok' : ' bad';
+      else if (i === val.length) cls += ' cur';
+      spans[i].className = cls;
+    }
+  }
+  function hud(){
+    var s = stats();
+    hudWpm.textContent = s.wpm;
+    hudAcc.textContent = s.acc + '%';
+    hudTime.textContent = s.secs + 's';
+  }
+  function finish(){
+    finishedAt = performance.now();
+    done = true;
+    if (ticker){ clearInterval(ticker); ticker = null; }
+    ghost.blur();
+    var s = stats();
+    hist.push(s.wpm); if (hist.length > 5) hist = hist.slice(-5);
+    localStorage.setItem('tt_hist', JSON.stringify(hist));
+    var isBest = !best || s.wpm > best;
+    if (isBest){ best = s.wpm; localStorage.setItem('tt_best', String(best)); }
+    document.getElementById('finalWpm').textContent = s.wpm;
+    document.getElementById('finalRank').textContent = rank(s.wpm) + (isBest ? ' · new best! 🏆' : '');
+    var avg = Math.round(hist.reduce(function(a,b){return a+b;},0)/hist.length);
+    document.getElementById('finalStats').textContent =
+      s.acc + '% accuracy · ' + s.secs + 's · best ' + best + ' · avg ' + avg;
+    resultEl.style.display = 'block';
+    tagline.textContent = 'Nice typing 👏';
+    resultEl.scrollIntoView({ behavior:'smooth', block:'nearest' });
+  }
+  ghost.addEventListener('input', function(){
+    if (done) return;
+    if (!started){
+      started = performance.now();
+      ticker = setInterval(hud, 250);
+      tagline.textContent = 'Go go go ⚡';
+    }
+    if (ghost.value.length > text.length) ghost.value = ghost.value.slice(0, text.length);
+    paint(); hud();
+    if (ghost.value.length === text.length) finish();
+  });
+  ghost.addEventListener('paste', function(e){ e.preventDefault(); });
+  passage.addEventListener('pointerdown', function(){
+    if (!done) ghost.focus();
+  });
+  document.getElementById('restart').addEventListener('click', function(){ newPassage(); });
+  document.getElementById('again').addEventListener('click', function(){ newPassage(); passage.dispatchEvent(new Event('pointerdown')); ghost.focus(); });
+  document.getElementById('share').addEventListener('click', function(){
+    var s = stats();
+    var msg = '⌨️ I type ' + document.getElementById('finalWpm').textContent + ' WPM (' + document.getElementById('finalRank').textContent.replace(/ ·.*/,'') + '). Beat me:';
+    var url = location.href;
+    if (navigator.share) navigator.share({ title:'Typing Speed Test', text: msg, url: url }).catch(function(){});
+    else if (navigator.clipboard){ navigator.clipboard.writeText(msg + ' ' + url); }
+  });
+  newPassage();
+})();
+</script>
+</body>
+</html>
