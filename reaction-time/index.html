@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Reaction Time Test — How Fast Are You?</title>
+<meta name="description" content="Free reaction time test. Tap the instant the screen turns green and get your speed in milliseconds. Save your best score and challenge your friends.">
+<meta name="theme-color" content="#0b0e1a">
+<meta property="og:title" content="Reaction Time Test — How Fast Are You?">
+<meta property="og:description" content="Tap the instant it turns green. Think you're fast? Prove it.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body {
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Arial,sans-serif;
+    background:#0b0e1a; color:#f3f5ff;
+    user-select:none; -webkit-user-select:none; -webkit-touch-callout:none;
+  }
+  #stage {
+    min-height:100dvh; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:28px; gap:16px; cursor:pointer; touch-action:manipulation;
+    transition:background .15s ease;
+    background:radial-gradient(120% 120% at 50% 0%, #1b2145 0%, #0b0e1a 70%);
+  }
+  #stage[data-state="waiting"] { background:radial-gradient(120% 120% at 50% 0%, #8f2020 0%, #450a0a 75%); }
+  #stage[data-state="ready"]   { background:radial-gradient(120% 120% at 50% 0%, #22c55e 0%, #14532d 80%); }
+  #stage[data-state="early"]   { background:radial-gradient(120% 120% at 50% 0%, #b45309 0%, #451a03 75%); }
+  .big  { font-size:clamp(1.9rem,8.5vw,3.6rem); font-weight:800; letter-spacing:-.02em; line-height:1.1; }
+  .tap  { font-size:clamp(3.4rem,17vw,7rem); font-weight:900; letter-spacing:-.03em; animation:pulse .5s infinite alternate; }
+  @keyframes pulse { from{transform:scale(1)} to{transform:scale(1.07)} }
+  .ms   { font-size:clamp(4.2rem,22vw,8.5rem); font-weight:900; font-variant-numeric:tabular-nums; letter-spacing:-.04em; line-height:1; }
+  .ms small { font-size:.32em; font-weight:700; opacity:.7; letter-spacing:0; }
+  .sub  { opacity:.78; font-size:clamp(1rem,4.2vw,1.25rem); line-height:1.5; max-width:34ch; }
+  .stats{ display:flex; gap:28px; margin-top:6px; }
+  .stats div { display:flex; flex-direction:column; gap:2px; }
+  .stats b { font-size:1.35rem; font-variant-numeric:tabular-nums; }
+  .stats span { font-size:.8rem; opacity:.6; text-transform:uppercase; letter-spacing:.08em; }
+  #share {
+    margin-top:14px; padding:14px 28px; font-size:1.05rem; font-weight:700; color:#0b0e1a;
+    background:#f3f5ff; border:none; border-radius:999px; cursor:pointer;
+    box-shadow:0 6px 24px rgba(0,0,0,.35); transition:transform .12s ease;
+  }
+  #share:active { transform:scale(.94); }
+  #toast {
+    position:fixed; left:50%; bottom:32px; transform:translateX(-50%) translateY(80px);
+    background:#f3f5ff; color:#0b0e1a; padding:10px 20px; border-radius:999px; font-weight:600;
+    transition:transform .25s ease; pointer-events:none; font-size:.95rem;
+  }
+  #toast.show { transform:translateX(-50%) translateY(0); }
+  .about { max-width:640px; margin:0 auto; padding:48px 24px 64px; user-select:text; -webkit-user-select:text; }
+  .about h2 { font-size:1.15rem; margin:26px 0 8px; }
+  .about p { opacity:.72; line-height:1.65; font-size:.98rem; }
+  .credit { margin-top:36px; text-align:center; opacity:.5; font-size:.9rem; }
+</style>
+</head>
+<body>
+<div id="stage" data-state="idle"><div id="content"></div></div>
+<div id="toast"></div>
+
+<main class="about">
+  <h2>How it works</h2>
+  <p>Tap anywhere to start. The screen turns red — wait for it. The instant it flashes green, tap as fast as you possibly can. We measure your reaction time in milliseconds.</p>
+  <h2>What's a good reaction time?</h2>
+  <p>Most people land between 200 and 300 ms. Under 200 ms is elite — pro-gamer territory. Your best score and recent average are saved on this device, so you can track your progress and challenge your friends to beat you.</p>
+  <p class="credit">Built with 🖤 by Jacob &amp; Claudia</p>
+</main>
+
+<script>
+(function(){
+  var stage = document.getElementById('stage');
+  var content = document.getElementById('content');
+  var toastEl = document.getElementById('toast');
+  var state = 'idle', timer = null, readyAt = 0, last = 0;
+  var best = parseInt(localStorage.getItem('rt_best') || '0', 10) || null;
+  var hist = [];
+  try { hist = JSON.parse(localStorage.getItem('rt_hist') || '[]'); } catch(e){ hist = []; }
+
+  function rank(ms){
+    if (ms < 180) return '⚡ INHUMAN';
+    if (ms < 220) return '🔥 Blazing fast';
+    if (ms < 260) return '💪 Fast';
+    if (ms < 300) return '👍 Solid';
+    if (ms < 350) return '🙂 Average';
+    return '🐢 Warming up';
+  }
+  function avg(){
+    if (!hist.length) return null;
+    return Math.round(hist.reduce(function(a,b){return a+b;},0) / hist.length);
+  }
+  function statsHtml(){
+    var a = avg();
+    if (!best && !a) return '';
+    return '<div class="stats">' +
+      (best ? '<div><b>'+best+' ms</b><span>Best</span></div>' : '') +
+      (a ? '<div><b>'+a+' ms</b><span>Avg</span></div>' : '') +
+      '</div>';
+  }
+  function render(){
+    if (state === 'idle') {
+      content.innerHTML = '<h1 class="big">⚡ Reaction Time Test</h1>' +
+        '<p class="sub">Tap anywhere to start</p>' + statsHtml();
+    } else if (state === 'waiting') {
+      content.innerHTML = '<p class="big">Wait for green…</p>';
+    } else if (state === 'ready') {
+      content.innerHTML = '<p class="tap">TAP!</p>';
+    } else if (state === 'early') {
+      content.innerHTML = '<p class="big">Too soon! 😅</p><p class="sub">Tap to try again</p>';
+    } else if (state === 'result') {
+      content.innerHTML = '<div class="ms">'+last+'<small> ms</small></div>' +
+        '<p class="big">'+rank(last)+'</p>' + statsHtml() +
+        '<button id="share" type="button">Challenge a friend 🚀</button>' +
+        '<p class="sub" style="margin-top:10px">Tap anywhere to go again</p>';
+      document.getElementById('share').addEventListener('pointerdown', function(e){ e.stopPropagation(); });
+      document.getElementById('share').addEventListener('click', function(e){ e.stopPropagation(); shareScore(); });
+    }
+    stage.dataset.state = state;
+  }
+  function setState(s){ state = s; render(); }
+  function start(){
+    setState('waiting');
+    timer = setTimeout(function(){ readyAt = performance.now(); setState('ready'); }, 1500 + Math.random()*2500);
+  }
+  function toast(msg){
+    toastEl.textContent = msg; toastEl.classList.add('show');
+    setTimeout(function(){ toastEl.classList.remove('show'); }, 2200);
+  }
+  function shareScore(){
+    var url = location.href;
+    var text = '⚡ My reaction time: ' + last + ' ms (' + rank(last).replace(/^[^ ]+ /,'') + '). Think you\u2019re faster?';
+    if (navigator.share) {
+      navigator.share({ title:'Reaction Time Test', text:text, url:url }).catch(function(){});
+    } else if (navigator.clipboard) {
+      navigator.clipboard.writeText(text + ' ' + url);
+      toast('Score copied — send it to a friend!');
+    } else {
+      toast('Score: ' + last + ' ms');
+    }
+  }
+  stage.addEventListener('pointerdown', function(e){
+    if (e.target.closest && e.target.closest('#share')) return;
+    if (state === 'idle' || state === 'result' || state === 'early') { start(); }
+    else if (state === 'waiting') { clearTimeout(timer); setState('early'); }
+    else if (state === 'ready') {
+      last = Math.max(1, Math.round(performance.now() - readyAt));
+      hist.push(last); if (hist.length > 5) hist = hist.slice(-5);
+      localStorage.setItem('rt_hist', JSON.stringify(hist));
+      if (!best || last < best) { best = last; localStorage.setItem('rt_best', String(best)); }
+      setState('result');
+    }
+  });
+  render();
+})();
+</script>
+</body>
+</html>
