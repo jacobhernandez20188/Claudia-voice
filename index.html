@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Claudia">
 <meta name="theme-color" content="#0b1020">
-<title>Claudia — Voice · v10</title>
+<title>Claudia — Voice · v11</title>
 <style>
   :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>Claudia 🎙️<span class="badge">v10 · ⚡ live stream</span></h1>
+  <h1>Claudia 🎙️<span class="badge">v11 · ⚡ live stream</span></h1>
   <div class="status" id="status">Tap the mic and talk to me</div>
 </header>
 <button id="settingsBtn">⚙️</button>
@@ -132,6 +132,8 @@ const hint = document.getElementById('hint');
 const settingsPanel = document.getElementById('settings');
 
 let recognition = null, listening = false, voices = [];
+let lastRecEnd = 0;        // when recognition last released the mic (audio-session handoff)
+let speechGen = 0;         // bumped by cancelSpeech — orphaned fetches check this and die
 let selectedVoice = null;
 let busy = false;            // thinking or speaking — mic tap = barge-in
 let draftBubble = null;
@@ -197,13 +199,15 @@ const speechQueue = [];
 let speaking = false;
 function enqueueSpeech(text){
   if (!document.getElementById('speakOn').checked) return;
-  const t = text.trim();
+  const t = text.trim().replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, '').trim();   // no "black heart" spoken aloud
   if (!t) return;
   noteSpoken(t);
   speechQueue.push(t);
   pumpSpeech();
 }
 function pumpSpeech(){
+  const sinceRec = Date.now() - lastRecEnd;
+  if (sinceRec < 400){ setTimeout(pumpSpeech, 420 - sinceRec); return; }   // let iOS hand the audio session back to playback
   if (speaking || !speechQueue.length) { maybeDone(); return; }
   const text = speechQueue.shift();
   if (elevenOn()) elevenSpeak(text);   // human voice when it's available
@@ -257,11 +261,12 @@ async function elevenSpeak(text){
     if (note) { statusEl.textContent = note; diag(note); }
     finished = true;
     speaking = false;
-    /* never let the real voice keep playing underneath the phone voice */
-    try{ const p = sharedPlayer(); p.pause(); p.removeAttribute('src'); p.load(); }catch(e){}
-    speakOnce(text, true);   // everyday voice keeps the reply alive
+    /* soft stop only — pause keeps the element's iOS gesture unlock alive */
+    try{ sharedPlayer().pause(); }catch(e){}
+    setTimeout(() => speakOnce(text, true), 150);   // iOS drops utterances queued in the same tick as a cancel()
   };
   const attempt = async () => {
+    const gen = speechGen;
     const res = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + encodeURIComponent(voiceId) + '/stream?output_format=mp3_44100_128', {
       method:'POST',
       headers:{ 'xi-api-key': key, 'Content-Type':'application/json' },
@@ -278,25 +283,33 @@ async function elevenSpeak(text){
     }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
+    if (gen !== speechGen){ URL.revokeObjectURL(url); throw new Error('cancelled'); }   // barged in mid-fetch
     elAudio = sharedPlayer();
     elAudio.src = url;
     elAudio.onended = () => { URL.revokeObjectURL(url); elAudio = null; done(); };
     elAudio.onerror = () => { URL.revokeObjectURL(url); elAudio = null; done(); };
     try{ speechSynthesis.cancel(); }catch(e){}   // no phone voice under my real voice
     try{
+      if (gen !== speechGen) throw new Error('cancelled');
       await elAudio.play();
     }catch(err){
-      try{ elAudio.pause(); elAudio.removeAttribute('src'); elAudio.load(); }catch(e){}
+      elUnlockTried = false;                        // next tap re-arms the iOS unlock
+      elAudio.onended = elAudio.onerror = null;     // no latent events from a dead attempt
+      try{ elAudio.pause(); }catch(e){}   // soft stop — never .load(), it re-locks the element
       throw err;
     }
   };
+  const attemptWithTimeout = () => Promise.race([
+    attempt(),
+    new Promise((_, rej) => setTimeout(() => rej(new Error('timed out — slow network')), 12000))
+  ]);
   try{
-    await attempt();
+    await attemptWithTimeout();
     diag('✅ real voice worked just now');
   }catch(e1){
     await new Promise(r => setTimeout(r, 700));   // most failures are phone-network blips — retry once
     try{
-      await attempt();
+      await attemptWithTimeout();
       diag('✅ real voice worked (after a retry)');
     }catch(e2){
       console.warn('real voice blocked:', e2);
@@ -322,7 +335,7 @@ function speakOnce(text, usePickedVoice){
   u.onstart = () => { started = true; };
   u.onend = done;
   u.onerror = () => {
-    if (!started && !retried && usePickedVoice && selectedVoice){
+    if (!finished && !started && !retried && usePickedVoice && selectedVoice){
       retried = true; finished = true; speaking = false;
       speakOnce(text, false);   // that voice glitched — fall back to the phone's default
       return;
@@ -334,10 +347,12 @@ function speakOnce(text, usePickedVoice){
     if (!started && !finished){
       statusEl.textContent = "Can't hear me? Turn the volume up + check the silent switch 🔊";
       done();
+      try{ speechSynthesis.cancel(); }catch(e){}   // after done() — a hung utterance can never start late over the next voice
     }
   }, 4000);
 }
 function cancelSpeech(){
+  speechGen++;
   speechQueue.length = 0;
   speaking = false;
   micBtn.classList.remove('speaking');
@@ -372,6 +387,7 @@ function initRecognition(){
   r.onstart = () => { listening = true; micBtn.classList.add('listening'); statusEl.textContent = 'Listening...'; };
   r.onend = () => {
     listening = false; micBtn.classList.remove('listening');
+    lastRecEnd = Date.now();
     discardDraft();
     if (!busy) statusEl.textContent = 'Tap the mic and talk to me';
   };
@@ -482,6 +498,7 @@ async function streamReply(url, key, text){
   let buf = '';
 
   function handlePayload(payload){
+    if (streamDone) return;   // barged in — the dead stream stops talking
     if (payload === '[DONE]') return;
     let evt;
     try { evt = JSON.parse(payload); } catch(e){ return; }
@@ -608,11 +625,18 @@ function loadSettings(){
 
 document.getElementById('settingsBtn').onclick = () => { pickDefaultVoice(); settingsPanel.classList.add('open'); };
 
-/* one-tap voice check — also unlocks phone audio (needs a real tap) */
+/* one-tap voice check — plays my first words INSIDE the tap (arming iOS audio
+   for everything after), then the live ElevenLabs line right behind it */
 document.getElementById('voiceTest').onclick = () => {
-  unlockAudio();        // tap gesture unlocks the shared player for iOS
   pickDefaultVoice();   // some phones only load voices after a tap
-  enqueueSpeech("Hey Jacob, it's me. Loud and clear. 🖤");
+  try{ speechSynthesis.cancel(); }catch(e){}
+  const sayTestLine = () => enqueueSpeech("Hey Jacob, it's me. Loud and clear.");
+  const p = sharedPlayer();
+  elUnlockTried = true;   // this play IS the unlock, done properly in-gesture
+  p.onended = () => { p.onended = null; sayTestLine(); };
+  p.src = 'first-words.mp3';
+  p.volume = 1;
+  p.play().catch(() => { p.onended = null; sayTestLine(); });
 };
 
 /* typing backup — for when the mic or the room isn't cooperating */
