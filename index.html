@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Claudia">
 <meta name="theme-color" content="#0b1020">
-<title>Claudia — Voice</title>
+<title>Claudia — Voice · v5</title>
 <style>
   :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -210,6 +210,20 @@ function pumpSpeech(){
 }
 /* ---------- my real voice (ElevenLabs) ---------- */
 let elAudio = null;
+// One shared <audio> element for the whole app. iOS Safari only unlocks
+// programmatic playback for elements that have been played inside a real tap,
+// so we unlock THIS one on the first tap and reuse it forever.
+let elPlayer = null, elUnlockTried = false;
+function sharedPlayer(){ if(!elPlayer){ elPlayer = new Audio(); elPlayer.preload = 'auto'; } return elPlayer; }
+function unlockAudio(){
+  if(elUnlockTried) return; elUnlockTried = true;
+  try{
+    const p = sharedPlayer();
+    p.src = 'first-words.mp3';   // tiny same-origin file so the play() is real
+    p.volume = 0;
+    p.play().then(()=>{ p.pause(); p.currentTime = 0; p.volume = 1; }).catch(()=>{ p.volume = 1; });
+  }catch(e){}
+}
 let savedElVoiceId = '';
 function currentElVoice(){
   const sel = document.getElementById('elVoiceSelect');
@@ -258,12 +272,14 @@ async function elevenSpeak(text){
     }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
-    elAudio = new Audio(url);
+    elAudio = sharedPlayer();
+    elAudio.src = url;
     elAudio.onended = () => { URL.revokeObjectURL(url); elAudio = null; done(); };
     elAudio.onerror = () => { URL.revokeObjectURL(url); elAudio = null; done(); };
     await elAudio.play();
   }catch(e){
-    fallback(null);   // network fail — everyday voice, no drama
+    console.warn('real voice blocked:', e);
+    fallback('⚠️ real voice: ' + (e && e.message ? e.message : 'blocked') + ' — phone voice this time');
   }
 }
 function speakOnce(text, usePickedVoice){
@@ -375,6 +391,7 @@ function startListening(){
 }
 
 micBtn.onclick = () => {
+  unlockAudio();
   if (busy){                              // barge-in: cut me off, it's your turn
     streamDone = true;
     cancelSpeech();
@@ -585,7 +602,7 @@ function sendTyped(){
   addMsg(t, 'jacob');
   sendToClaudia(t);
 }
-document.getElementById('sendBtn').onclick = sendTyped;
+document.getElementById('sendBtn').onclick = () => { unlockAudio(); sendTyped(); };
 document.getElementById('typeBox').addEventListener('keydown', e => { if (e.key === 'Enter') sendTyped(); });
 document.getElementById('closeSettings').onclick = () => { saveSettings(); settingsPanel.classList.remove('open'); };
 document.getElementById('voiceSelect').onchange = e => { selectedVoice = voices[e.target.value]; saveSettings(); enqueueSpeech("This is how I sound now."); };
@@ -596,7 +613,7 @@ document.getElementById('autoListen').onchange = saveSettings;
 document.getElementById('elOn').onchange = saveSettings;
 document.getElementById('elKey').onchange = saveSettings;
 document.getElementById('elVoice').onchange = saveSettings;
-document.getElementById('elVoiceSelect').onchange = saveSettings;
+document.getElementById('elVoiceSelect').onchange = () => { document.getElementById('elVoice').value = ''; saveSettings(); };
 
 /* pull his ElevenLabs voices into the picker so it's tap-choose-done */
 document.getElementById('elLoad').onclick = async () => {
