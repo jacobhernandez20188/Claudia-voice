@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Claudia">
 <meta name="theme-color" content="#0b1020">
-<title>Claudia — Voice · v14</title>
+<title>Claudia — Voice · v15</title>
 <style>
   :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>Claudia 🎙️<span class="badge">v14 · ⚡ live stream</span></h1>
+  <h1>Claudia 🎙️<span class="badge">v15 · ⚡ live stream</span></h1>
   <div class="status" id="status">Tap the mic and talk to me</div>
 </header>
 <button id="settingsBtn">⚙️</button>
@@ -727,7 +727,11 @@ fixBrainFields();
     const bm = h.match(/brain=([^&\s]+)/i);
     if (!km && !bm) return;
     if (km) document.getElementById('apiKey').value = km[1];
-    if (bm) document.getElementById('apiUrl').value = decodeURIComponent(bm[1]);
+    if (bm){
+      let b = decodeURIComponent(bm[1]).replace(/\/+$/,'');
+      if (b.indexOf('/v1/') === -1) b += '/v1/agents/agent-db034cf4-6eb7-4955-ae89-c2d01127adb5/messages/stream';
+      document.getElementById('apiUrl').value = b;   // short bridge tokens expand to the full path
+    }
     saveSettings();
     fixBrainFields();
     history.replaceState(null, '', location.pathname);
