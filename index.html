@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Claudia">
 <meta name="theme-color" content="#0b1020">
-<title>Claudia — Voice · v5</title>
+<title>Claudia — Voice · v6</title>
 <style>
   :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -236,7 +236,7 @@ function elevenOn(){
          !!currentElVoice();
 }
 async function elevenSpeak(text){
-  const key = document.getElementById('elKey').value.trim();
+  const key = document.getElementById('elKey').value.replace(/\s+/g,'');
   const voiceId = currentElVoice();
   speaking = true;
   micBtn.classList.add('speaking');
@@ -405,7 +405,7 @@ micBtn.onclick = () => {
 
 /* ---------- the streaming brain ---------- */
 function streamUrl(){
-  let url = document.getElementById('apiUrl').value.trim();
+  let url = document.getElementById('apiUrl').value.replace(/\s+/g,'');
   if (!url) return '';
   url = url.replace(/\/+$/,'');
   if (url.endsWith('/stream')) return url;
@@ -419,7 +419,7 @@ async function sendToClaudia(text){
   cancelSpeech();
   statusEl.textContent = 'Thinking...';
   const url = streamUrl();
-  const key = document.getElementById('apiKey').value.trim();
+  const key = document.getElementById('apiKey').value.replace(/\s+/g,'');
   if (url && key){
     try{
       await streamReply(url, key, text);
@@ -617,7 +617,7 @@ document.getElementById('elVoiceSelect').onchange = () => { document.getElementB
 
 /* pull his ElevenLabs voices into the picker so it's tap-choose-done */
 document.getElementById('elLoad').onclick = async () => {
-  const key = document.getElementById('elKey').value.trim();
+  const key = document.getElementById('elKey').value.replace(/\s+/g,'');
   const out = document.getElementById('elStatus');
   if (!key){ out.textContent = 'Paste the key first.'; return; }
   out.textContent = 'Loading voices...';
@@ -651,7 +651,7 @@ if (!apiUrlInput.value.trim()){
 document.getElementById('testBrain').onclick = async () => {
   const out = document.getElementById('testResult');
   const url = streamUrl();
-  const key = document.getElementById('apiKey').value.trim();
+  const key = document.getElementById('apiKey').value.replace(/\s+/g,'');
   if (!url || !key){ out.textContent = 'Add the key first, then test.'; return; }
   out.textContent = 'Testing...';
   out.style.color = 'var(--dim)';
