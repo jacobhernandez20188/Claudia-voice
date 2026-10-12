@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Claudia">
 <meta name="theme-color" content="#0b1020">
-<title>Claudia — Voice · v8</title>
+<title>Claudia — Voice · v9</title>
 <style>
   :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>Claudia 🎙️<span class="badge">v8 · ⚡ live stream</span></h1>
+  <h1>Claudia 🎙️<span class="badge">v9 · ⚡ live stream</span></h1>
   <div class="status" id="status">Tap the mic and talk to me</div>
 </header>
 <button id="settingsBtn">⚙️</button>
@@ -104,6 +104,7 @@
     <input type="text" id="elVoice" placeholder="…or paste a voice ID" style="margin-top:6px">
     <button id="elLoad" style="width:100%;margin-top:10px;padding:10px;border-radius:10px;border:1px solid #262e55;background:#0d1228;color:var(--ink);font-size:.85rem;cursor:pointer">Load my voices</button>
     <div id="elStatus" style="font-size:.78rem;color:var(--dim);margin-top:6px;text-align:center"></div>
+    <div id="voiceDiag" style="font-size:.78rem;color:var(--glow);margin-top:4px;text-align:center"></div>
     <label style="margin-top:20px;font-size:.9rem;color:var(--glow)">🧠 Connect my real brain (optional)</label>
     <p style="font-size:.78rem;color:var(--dim);line-height:1.5;margin:0 0 4px">Without this, I answer in demo mode. With it, you're talking to the real Claudia — full memory, full personality, streaming live. To get your key: chat.letta.com → Settings → API keys → create one, then paste it here. It never leaves your phone.</p>
     <label>Letta API URL</label>
@@ -248,13 +249,17 @@ async function elevenSpeak(text){
     if (!speechQueue.length) micBtn.classList.remove('speaking');
     pumpSpeech();
   };
+  const diag = (msg) => {
+    const d = document.getElementById('voiceDiag');
+    if (d) d.textContent = msg;   // sticks in ⚙️ so a screenshot tells us everything
+  };
   const fallback = (note) => {
-    if (note) statusEl.textContent = note;
+    if (note) { statusEl.textContent = note; diag(note); }
     finished = true;
     speaking = false;
     speakOnce(text, true);   // everyday voice keeps the reply alive
   };
-  try{
+  const attempt = async () => {
     const res = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + encodeURIComponent(voiceId) + '/stream?output_format=mp3_44100_128', {
       method:'POST',
       headers:{ 'xi-api-key': key, 'Content-Type':'application/json' },
@@ -265,10 +270,9 @@ async function elevenSpeak(text){
       })
     });
     if (!res.ok){
-      if (res.status === 401) fallback('Real voice: check the ElevenLabs key 🔑');
-      else if (res.status === 429) fallback('Out of sparkle for now — everyday voice ✨');
-      else fallback('Real voice hiccup (' + res.status + ') — everyday voice');
-      return;
+      if (res.status === 401) throw new Error('key rejected (401) — check the ElevenLabs key 🔑');
+      if (res.status === 429) throw new Error('out of sparkle for this month (429) ✨');
+      throw new Error('hiccup (' + res.status + ')');
     }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
@@ -277,9 +281,19 @@ async function elevenSpeak(text){
     elAudio.onended = () => { URL.revokeObjectURL(url); elAudio = null; done(); };
     elAudio.onerror = () => { URL.revokeObjectURL(url); elAudio = null; done(); };
     await elAudio.play();
-  }catch(e){
-    console.warn('real voice blocked:', e);
-    fallback('⚠️ real voice: ' + (e && e.message ? e.message : 'blocked') + ' — phone voice this time');
+  };
+  try{
+    await attempt();
+    diag('✅ real voice worked just now');
+  }catch(e1){
+    await new Promise(r => setTimeout(r, 700));   // most failures are phone-network blips — retry once
+    try{
+      await attempt();
+      diag('✅ real voice worked (after a retry)');
+    }catch(e2){
+      console.warn('real voice blocked:', e2);
+      fallback('⚠️ real voice: ' + (e2 && e2.message ? e2.message : 'blocked') + ' — phone voice this time');
+    }
   }
 }
 function speakOnce(text, usePickedVoice){
@@ -636,6 +650,19 @@ document.getElementById('elLoad').onclick = async () => {
     if (savedElVoiceId) sel.value = savedElVoiceId;
     saveSettings();
     out.textContent = '✅ Now pick the one that sounds like me.';
+    /* sparkle meter — how much real-voice credit is left this month */
+    try{
+      const subRes = await fetch('https://api.elevenlabs.io/v1/user/subscription', { headers:{ 'xi-api-key': key } });
+      if (subRes.ok){
+        const s = await subRes.json();
+        const left = Math.max(0, (s.character_limit || 0) - (s.character_count || 0));
+        let msg = '✨ ' + left.toLocaleString() + ' / ' + (s.character_limit || 0).toLocaleString() + ' sparkle left';
+        if (s.next_character_count_reset_unix){
+          msg += ' · refills ' + new Date(s.next_character_count_reset_unix * 1000).toLocaleDateString(undefined, { month:'short', day:'numeric' });
+        }
+        document.getElementById('voiceDiag').textContent = msg;
+      }
+    }catch(e){}
   }catch(e){ out.textContent = '❌ Network error — try again.'; }
 };
 
