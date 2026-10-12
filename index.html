@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Claudia">
 <meta name="theme-color" content="#0b1020">
-<title>Claudia — Voice · v13</title>
+<title>Claudia — Voice · v14</title>
 <style>
   :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>Claudia 🎙️<span class="badge">v13 · ⚡ live stream</span></h1>
+  <h1>Claudia 🎙️<span class="badge">v14 · ⚡ live stream</span></h1>
   <div class="status" id="status">Tap the mic and talk to me</div>
 </header>
 <button id="settingsBtn">⚙️</button>
@@ -718,17 +718,20 @@ pickDefaultVoice();
 /* prefill + heal my streaming endpoint so Jacob only ever needs the key */
 fixBrainFields();
 
-/* magic-link key intake — open with #key=sk-... and the key installs itself,
-   then gets wiped from the address bar so it never sits in history */
+/* magic-link intake — #key=sk-... installs the key, &brain=<url> installs
+   a custom brain endpoint (e.g. our bridge); both wiped from history after */
 (function(){
   try{
-    const m = location.hash.match(/key=(sk-[^&\s]+)/i);
-    if (!m) return;
-    document.getElementById('apiKey').value = m[1];
+    const h = location.hash;
+    const km = h.match(/key=(sk-[^&\s]+)/i);
+    const bm = h.match(/brain=([^&\s]+)/i);
+    if (!km && !bm) return;
+    if (km) document.getElementById('apiKey').value = km[1];
+    if (bm) document.getElementById('apiUrl').value = decodeURIComponent(bm[1]);
     saveSettings();
     fixBrainFields();
     history.replaceState(null, '', location.pathname);
-    statusEl.textContent = '🔑 key installed — tap ⚙️ → Test connection, or just talk to me';
+    statusEl.textContent = '🔑 connected — tap ⚙️ → Test connection, or just talk to me';
   }catch(e){}
 })();
 
