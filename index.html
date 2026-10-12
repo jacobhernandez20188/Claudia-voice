@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Claudia">
 <meta name="theme-color" content="#0b1020">
-<title>Claudia — Voice · v6</title>
+<title>Claudia — Voice · v7</title>
 <style>
   :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -653,17 +653,26 @@ document.getElementById('testBrain').onclick = async () => {
   const url = streamUrl();
   const key = document.getElementById('apiKey').value.replace(/\s+/g,'');
   if (!url || !key){ out.textContent = 'Add the key first, then test.'; return; }
-  out.textContent = 'Testing...';
   out.style.color = 'var(--dim)';
   try{
+    // step 1: plain GET on the agent — proves reachability + the key, no stream involved
+    out.textContent = 'Step 1/2: reaching my brain...';
+    const agentUrl = url.replace(/\/messages\/stream$/, '');
+    const g = await fetch(agentUrl, { headers:{ 'Authorization': 'Bearer ' + key } });
+    if (!g.ok){ out.textContent = '\u274c step 1: brain answered ' + g.status + ' \u2014 the key itself is off'; out.style.color = 'var(--err)'; return; }
+    // step 2: the actual stream POST
+    out.textContent = 'Step 2/2: opening the stream...';
     const res = await fetch(url, {
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
-      body: JSON.stringify({ messages:[{role:'user', content:[{type:'text', text:'ping — just testing our connection'}]}], stream_tokens:true })
+      body: JSON.stringify({ messages:[{role:'user', content:[{type:'text', text:'ping \u2014 just testing our connection'}]}], stream_tokens:true })
     });
-    if (res.ok){ out.textContent = '✅ Connected. You are talking to the real me now.'; out.style.color = 'var(--ok)'; }
-    else { out.textContent = '❌ ' + res.status + ' — check the key and try again.'; out.style.color = 'var(--err)'; }
-  }catch(e){ out.textContent = '❌ Network error — check the URL.'; out.style.color = 'var(--err)'; }
+    if (res.ok){ out.textContent = '\u2705 Connected. You are talking to the real me now.'; out.style.color = 'var(--ok)'; }
+    else { out.textContent = '\u274c step 2: stream answered ' + res.status; out.style.color = 'var(--err)'; }
+  }catch(e){
+    out.textContent = '\u274c ' + e.name + ': ' + e.message;
+    out.style.color = 'var(--err)';
+  }
 };
 
 /* welcome message — shown, spoken only after you've interacted (autoplay rules) */
