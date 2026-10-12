@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Claudia">
 <meta name="theme-color" content="#0b1020">
-<title>Claudia — Voice · v7</title>
+<title>Claudia — Voice · v8</title>
 <style>
   :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>Claudia 🎙️<span class="badge">⚡ live stream</span></h1>
+  <h1>Claudia 🎙️<span class="badge">v8 · ⚡ live stream</span></h1>
   <div class="status" id="status">Tap the mic and talk to me</div>
 </header>
 <button id="settingsBtn">⚙️</button>
@@ -588,6 +588,7 @@ document.getElementById('settingsBtn').onclick = () => { pickDefaultVoice(); set
 
 /* one-tap voice check — also unlocks phone audio (needs a real tap) */
 document.getElementById('voiceTest').onclick = () => {
+  unlockAudio();        // tap gesture unlocks the shared player for iOS
   pickDefaultVoice();   // some phones only load voices after a tap
   enqueueSpeech("Hey Jacob, it's me. Loud and clear. 🖤");
 };
