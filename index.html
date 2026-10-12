@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Claudia">
 <meta name="theme-color" content="#0b1020">
-<title>Claudia — Voice · v11</title>
+<title>Claudia — Voice · v12</title>
 <style>
   :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>Claudia 🎙️<span class="badge">v11 · ⚡ live stream</span></h1>
+  <h1>Claudia 🎙️<span class="badge">v12 · ⚡ live stream</span></h1>
   <div class="status" id="status">Tap the mic and talk to me</div>
 </header>
 <button id="settingsBtn">⚙️</button>
@@ -107,9 +107,9 @@
     <div id="voiceDiag" style="font-size:.78rem;color:var(--glow);margin-top:4px;text-align:center"></div>
     <label style="margin-top:20px;font-size:.9rem;color:var(--glow)">🧠 Connect my real brain (optional)</label>
     <p style="font-size:.78rem;color:var(--dim);line-height:1.5;margin:0 0 4px">Without this, I answer in demo mode. With it, you're talking to the real Claudia — full memory, full personality, streaming live. To get your key: chat.letta.com → Settings → API keys → create one, then paste it here. It never leaves your phone.</p>
-    <label>Letta API URL</label>
+    <label>Letta API URL <span style="color:var(--dim);font-weight:normal">— leave the https address here</span></label>
     <input type="url" id="apiUrl" placeholder="https://api.letta.com/v1/agents/.../messages/stream">
-    <label>Letta API Key</label>
+    <label>Letta API Key <span style="color:var(--dim);font-weight:normal">— the sk- key goes HERE</span></label>
     <input type="password" id="apiKey" placeholder="sk-...">
     <button id="testBrain" style="width:100%;margin-top:12px;padding:10px;border-radius:10px;border:1px solid #262e55;background:#0d1228;color:var(--ink);font-size:.85rem;cursor:pointer">Test connection</button>
     <div id="testResult" style="font-size:.78rem;color:var(--dim);margin-top:8px;text-align:center"></div>
@@ -442,7 +442,21 @@ micBtn.onclick = () => {
 };
 
 /* ---------- the streaming brain ---------- */
+const BRAIN_URL = 'https://api.letta.com/v1/agents/agent-db034cf4-6eb7-4955-ae89-c2d01127adb5/messages/stream';
+/* the field guard — a key pasted into the URL box gets moved home,
+   a mangled/empty URL heals itself, a URL in the key box gets cleared */
+function fixBrainFields(){
+  const u = document.getElementById('apiUrl'), k = document.getElementById('apiKey');
+  const url = u.value.replace(/\s+/g,''), key = k.value.replace(/\s+/g,'');
+  let fixed = false;
+  if (/^sk-/i.test(url)){ u.value = BRAIN_URL; k.value = url; fixed = true; }
+  else if (!url || !/^https:\/\//i.test(url)){ u.value = BRAIN_URL; fixed = true; }
+  if (/^https?:/i.test(key)){ k.value = ''; fixed = true; }
+  if (fixed) saveSettings();
+  return fixed;
+}
 function streamUrl(){
+  fixBrainFields();
   let url = document.getElementById('apiUrl').value.replace(/\s+/g,'');
   if (!url) return '';
   url = url.replace(/\/+$/,'');
@@ -701,15 +715,13 @@ document.getElementById('elLoad').onclick = async () => {
 loadSettings();
 pickDefaultVoice();
 
-/* prefill my real streaming endpoint so Jacob only needs the key */
-const apiUrlInput = document.getElementById('apiUrl');
-if (!apiUrlInput.value.trim()){
-  apiUrlInput.value = 'https://api.letta.com/v1/agents/agent-db034cf4-6eb7-4955-ae89-c2d01127adb5/messages/stream';
-}
+/* prefill + heal my streaming endpoint so Jacob only ever needs the key */
+fixBrainFields();
 
 /* test-connection button — a real streamed ping */
 document.getElementById('testBrain').onclick = async () => {
   const out = document.getElementById('testResult');
+  if (fixBrainFields()) out.textContent = 'I tidied the fields for you — key was in the wrong box 🖤 testing...';
   const url = streamUrl();
   const key = document.getElementById('apiKey').value.replace(/\s+/g,'');
   if (!url || !key){ out.textContent = 'Add the key first, then test.'; return; }
