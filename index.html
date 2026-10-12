@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Claudia">
 <meta name="theme-color" content="#0b1020">
-<title>Claudia — Voice · v9</title>
+<title>Claudia — Voice · v10</title>
 <style>
   :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>Claudia 🎙️<span class="badge">v9 · ⚡ live stream</span></h1>
+  <h1>Claudia 🎙️<span class="badge">v10 · ⚡ live stream</span></h1>
   <div class="status" id="status">Tap the mic and talk to me</div>
 </header>
 <button id="settingsBtn">⚙️</button>
@@ -257,6 +257,8 @@ async function elevenSpeak(text){
     if (note) { statusEl.textContent = note; diag(note); }
     finished = true;
     speaking = false;
+    /* never let the real voice keep playing underneath the phone voice */
+    try{ const p = sharedPlayer(); p.pause(); p.removeAttribute('src'); p.load(); }catch(e){}
     speakOnce(text, true);   // everyday voice keeps the reply alive
   };
   const attempt = async () => {
@@ -280,7 +282,13 @@ async function elevenSpeak(text){
     elAudio.src = url;
     elAudio.onended = () => { URL.revokeObjectURL(url); elAudio = null; done(); };
     elAudio.onerror = () => { URL.revokeObjectURL(url); elAudio = null; done(); };
-    await elAudio.play();
+    try{ speechSynthesis.cancel(); }catch(e){}   // no phone voice under my real voice
+    try{
+      await elAudio.play();
+    }catch(err){
+      try{ elAudio.pause(); elAudio.removeAttribute('src'); elAudio.load(); }catch(e){}
+      throw err;
+    }
   };
   try{
     await attempt();
@@ -369,7 +377,7 @@ function initRecognition(){
   };
   r.onerror = (e) => {
     listening = false; micBtn.classList.remove('listening');
-    if (e.error === 'not-allowed') statusEl.textContent = 'Allow mic access in your browser settings';
+    if (e.error === 'not-allowed') statusEl.textContent = 'Mic blocked — open in Safari (compass icon), then aA → Website Settings → Microphone → Allow';
     else if (e.error !== 'aborted' && e.error !== 'no-speech') statusEl.textContent = 'Mic error: ' + e.error;
   };
   r.onresult = (e) => {
