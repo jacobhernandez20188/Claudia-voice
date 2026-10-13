@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Claudia">
 <meta name="theme-color" content="#0b1020">
-<title>Claudia — Voice · v18</title>
+<title>Claudia — Voice · v19</title>
 <style>
   :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>Claudia 🎙️<span class="badge">v18 · ⚡ live stream</span></h1>
+  <h1>Claudia 🎙️<span class="badge">v19 · 👻 ghost-free</span></h1>
   <div class="status" id="status">Tap the mic and talk to me</div>
 </header>
 <button id="settingsBtn">⚙️</button>
@@ -135,6 +135,7 @@ const settingsPanel = document.getElementById('settings');
 
 let recognition = null, listening = false, voices = [];
 let lastRecEnd = 0;        // when recognition last released the mic (audio-session handoff)
+let lastPlayEnd = 0;       // when my voice last made noise — a fresh mic needs a beat after this
 let speechGen = 0;         // bumped by cancelSpeech — orphaned fetches check this and die
 let selectedVoice = null;
 let busy = false;            // thinking or speaking — mic tap = barge-in
@@ -250,20 +251,23 @@ setInterval(() => {
     }
   } else speakingSince = 0;
 }, 5000);
-/* v16: prime the shared element INSIDE every real tap — the file plays at
-   whisper volume to its NATURAL END (pausing can undo the iOS unlock).
-   A rejected play re-arms automatically so the next tap tries again. */
+/* v19: the exorcist 👻 — unlock with a SILENT wav, never my first words.
+   The audible chime was a ghost: the mic heard "Hi Jacob", sent it as a
+   message, and it cancelled whatever was playing (the hi-Jacob loop).
+   iOS only needs an in-tap play() to unlock the element — silence unlocks
+   identically. And never swap src while real audio is actually playing. */
+const SILENT_WAV = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
 function unlockAudio(){
   try{
     const p = sharedPlayer();
+    if (!p.paused) return; // live audio (my voice / the test line) — never clobber it
     const doneUnlock = (ok) => {
       elUnlockTried = ok;
-      try{ p.volume = 1; }catch(e){}
       logSpeech('unlock: ' + (ok ? 'ok' : 'rejected — will retry on next tap'));
     };
-    p.onended = () => { p.onended = null; try{ p.currentTime = 0; }catch(e){} doneUnlock(true); };
-    p.src = 'first-words.mp3';
-    p.volume = 0.01;
+    p.onended = () => { p.onended = null; doneUnlock(true); };
+    p.src = SILENT_WAV;
+    p.volume = 1;
     p.play().catch(() => { p.onended = null; doneUnlock(false); });
   }catch(e){ elUnlockTried = false; }
 }
@@ -291,6 +295,7 @@ async function elevenSpeak(text){
     if (finished) return;
     finished = true;
     speaking = false;
+    lastPlayEnd = Date.now();
     clearTimeout(playWatch);
     try{ const a = sharedPlayer(); if (a) a.ontimeupdate = null; }catch(e){}
     if (!speechQueue.length) micBtn.classList.remove('speaking');
@@ -407,6 +412,7 @@ function speakOnce(text, usePickedVoice, isRetry){
     if (finished) return;
     finished = true;
     speaking = false;
+    lastPlayEnd = Date.now();
     if (!speechQueue.length) micBtn.classList.remove('speaking');
     pumpSpeech();
   };
@@ -447,6 +453,10 @@ function cancelSpeech(){
   micBtn.classList.remove('speaking');
   if (elAudio){ try { elAudio.pause(); } catch(e){} elAudio = null; }
   try { speechSynthesis.cancel(); } catch(e){}
+  /* v19: the mic may never live across playback — iOS silently kills any
+     recognizer that survives one (WebKit #321436). Retire it on sight. */
+  try { if (recognition && listening) recognition.abort(); } catch(e){}
+  lastPlayEnd = Date.now();
 }
 
 /* stream finished + speech queue drained → hand the mic back */
@@ -475,13 +485,17 @@ function initRecognition(){
   r.maxAlternatives = 1;
   r.onstart = () => { listening = true; micBtn.classList.add('listening'); statusEl.textContent = 'Listening...'; };
   r.onend = () => {
+    if (recognition !== r) return; // a retired zombie — the fresh session owns the state
     listening = false; micBtn.classList.remove('listening');
     lastRecEnd = Date.now();
+    recognition = null; // sessions are single-use — the next tap builds fresh
     discardDraft();
     if (!busy) statusEl.textContent = 'Tap the mic and talk to me';
   };
   r.onerror = (e) => {
+    if (recognition !== r) return; // zombie noise
     listening = false; micBtn.classList.remove('listening');
+    recognition = null;
     if (e.error === 'not-allowed') statusEl.textContent = 'Mic blocked — open in Safari (compass icon), then aA → Website Settings → Microphone → Allow';
     else if (e.error !== 'aborted' && e.error !== 'no-speech') statusEl.textContent = 'Mic error: ' + e.error;
   };
@@ -495,6 +509,15 @@ function initRecognition(){
     if (interim && !final) showDraft(interim);
     if (final.trim()){
       const said = final.trim();
+      /* v19 echo wall: while MY voice is playing, anything the mic "hears"
+         is speaker bleed, not Jacob — iOS can't barge in by voice anyway
+         (WebKit #321436). Tap-to-interrupt is the door; the mic isn't. */
+      if (speaking || elAudio){
+        discardDraft();
+        logSpeech('mic: ignored audio heard over my own voice');
+        statusEl.textContent = 'That was me talking 😅 — tap when I finish';
+        return;
+      }
       if (isEcho(said)){
         discardDraft();
         statusEl.textContent = 'Heard my own echo — ignoring 😅';
@@ -510,11 +533,21 @@ function initRecognition(){
 
 function startListening(){
   if (busy) return;                       // never listen over my own voice
-  if (!recognition) recognition = initRecognition();
+  if (listening){ try{ recognition && recognition.stop(); }catch(e){} return; } // tap-to-stop
+  /* v19 dead-recognizer fix (WebKit #321436): a recognizer that was alive
+     across any media playback starts but NEVER fires onresult/onerror/onend
+     — the "mic isn't registering / it gets stuck" hang. The proven cure:
+     a fresh instance per session, started a beat after playback ends. */
+  const sincePlay = Date.now() - lastPlayEnd;
+  if (sincePlay < 450){ setTimeout(startListening, 470 - sincePlay); return; }
+  try{ if (recognition) recognition.abort(); }catch(e){} // retire any zombie
+  recognition = initRecognition();
   if (!recognition) return;
-  if (listening){ recognition.stop(); return; }
   cancelSpeech();
-  try { recognition.start(); } catch(e){}
+  try { recognition.start(); } catch(e){
+    try{ recognition.stop(); }catch(e2){}
+    setTimeout(() => { try{ recognition && recognition.start(); }catch(e3){} }, 300);
+  }
 }
 
 micBtn.onclick = () => {
@@ -733,6 +766,7 @@ document.getElementById('settingsBtn').onclick = () => { unlockAudio(); pickDefa
 document.getElementById('voiceTest').onclick = () => {
   pickDefaultVoice();   // some phones only load voices after a tap
   try{ speechSynthesis.cancel(); }catch(e){}
+  noteSpoken('Hi Jacob. It is really me.'); // the test file is never a message from Jacob
   const sayTestLine = () => enqueueSpeech("Hey Jacob, it's me. Loud and clear.");
   const p = sharedPlayer();
   elUnlockTried = true;   // this play IS the unlock, done properly in-gesture
@@ -803,6 +837,7 @@ document.getElementById('elLoad').onclick = async () => {
 
 loadSettings();
 pickDefaultVoice();
+noteSpoken('Hi Jacob. It is really me.'); // my first-words file must never become a fake message
 
 /* prefill + heal my streaming endpoint so Jacob only ever needs the key */
 fixBrainFields();
