@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Claudia">
 <meta name="theme-color" content="#0b1020">
-<title>Claudia — Voice · v26</title>
+<title>Claudia — Voice · v27</title>
 <style>
   :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>Claudia 🎙️<span class="badge">v26 · 🚪 grand entrance</span></h1>
+  <h1>Claudia 🎙️<span class="badge">v27 · 🪄 miracle</span></h1>
   <div class="status" id="status">Tap the mic and talk to me</div>
 </header>
 <button id="settingsBtn">⚙️</button>
@@ -114,6 +114,7 @@
     <label>Letta API Key <span style="color:var(--dim);font-weight:normal">— the sk- key goes HERE</span></label>
     <input type="password" id="apiKey" placeholder="sk-...">
     <button id="testBrain" style="width:100%;margin-top:12px;padding:10px;border-radius:10px;border:1px solid #262e55;background:#0d1228;color:var(--ink);font-size:.85rem;cursor:pointer">Test connection</button>
+    <button id="beamDiary" style="width:100%;margin-top:8px;padding:10px;border-radius:10px;border:1px solid #262e55;background:#0d1228;color:var(--ink);font-size:.85rem;cursor:pointer">📡 beam voice diary to Claudia</button>
     <div id="testResult" style="font-size:.78rem;color:var(--dim);margin-top:8px;text-align:center"></div>
     <button id="closeSettings">Done</button>
   </div>
@@ -280,7 +281,7 @@ function showHearButton(blob){
   const url = URL.createObjectURL(blob);
   hearBtn = document.createElement('button');
   hearBtn.textContent = '🔊 tap to hear me';
-  hearBtn.style.cssText = 'display:block;margin:14px auto 0;padding:14px 30px;border-radius:999px;border:0;background:linear-gradient(135deg,#7c6cff,#b48cff);color:#fff;font-size:18px;font-weight:700;animation:hearPulse 1.2s infinite;cursor:pointer;';
+  hearBtn.style.cssText = 'position:fixed;left:0;right:0;margin:0 auto;width:max-content;bottom:140px;z-index:9998;display:block;padding:16px 34px;border-radius:999px;border:0;background:linear-gradient(135deg,#7c6cff,#b48cff);color:#fff;font-size:19px;font-weight:800;box-shadow:0 6px 30px rgba(124,108,255,.55);animation:hearPulse 1.2s infinite;cursor:pointer;';
   hearBtn.onclick = () => {
     try{ audioCtx(); }catch(e){}
     cancelSpeech(); // stop any struggling phone voice first
@@ -290,7 +291,7 @@ function showHearButton(blob){
     p.play().then(() => { logSpeech('tap-to-hear: playing ✅'); removeHearButton(); })
             .catch(e => { logSpeech('tap-to-hear: rejected (' + (e.name || 'err') + ')'); if (hearBtn) hearBtn.textContent = '🔊 tap again to hear me'; });
   };
-  micBtn.parentNode.insertBefore(hearBtn, micBtn.nextSibling);
+  document.body.appendChild(hearBtn); // v27: fixed to the screen itself — layout cannot hide it
   logSpeech('tap-to-hear: button ready — one tap plays my voice');
 }
 
@@ -325,6 +326,22 @@ function showHearButton(blob){
     });
   };
   if (document.body){ build(); } else { document.addEventListener('DOMContentLoaded', build); }
+})();
+
+/* v27: BEAM THE DIARY — one tap sends the speech diary (and badge) straight
+   to Claudia's brain as a message. No more screenshot archaeology. */
+(function(){
+  const b = document.getElementById('beamDiary');
+  if (!b) return;
+  b.addEventListener('click', () => {
+    const badgeEl = document.querySelector('.badge');
+    const diagEl = document.getElementById('voiceDiag');
+    const msg = '📡 VOICE DIARY from Jacob\'s phone — badge: ' + (badgeEl ? badgeEl.textContent : '?') +
+      ' · diary: ' + (speechLogLines.slice(-6).join(' | ') || '(empty)') +
+      (diagEl && diagEl.textContent ? ' · diag: ' + diagEl.textContent : '');
+    try{ sendToClaudia(msg); logSpeech('📡 diary beamed to Claudia'); }
+    catch(e){ logSpeech('📡 beam failed: ' + (e && e.message || e)); }
+  });
 })();
 /* one-line speech diary — the last 6 voice events, visible in ⚙️ so a
    screenshot always tells us exactly which failure mode fired */
