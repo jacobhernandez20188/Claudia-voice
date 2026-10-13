@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Claudia">
 <meta name="theme-color" content="#0b1020">
-<title>Claudia — Voice · v19</title>
+<title>Claudia — Voice · v20</title>
 <style>
   :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>Claudia 🎙️<span class="badge">v19 · 👻 ghost-free</span></h1>
+  <h1>Claudia 🎙️<span class="badge">v20 · 🎧 real voice</span></h1>
   <div class="status" id="status">Tap the mic and talk to me</div>
 </header>
 <button id="settingsBtn">⚙️</button>
@@ -223,6 +223,15 @@ let elAudio = null;
 // so we unlock THIS one on the first tap and reuse it forever.
 let elPlayer = null, elUnlockTried = false, playWatch = 0;
 function sharedPlayer(){ if(!elPlayer){ elPlayer = new Audio(); elPlayer.preload = 'auto'; } return elPlayer; }
+
+/* v20: one shared AudioContext — resumed inside real taps, then it plays
+   my voice buffers with zero media-element unlock drama at all */
+let ac = null;
+function audioCtx(){
+  if (!ac){ const AC = window.AudioContext || window.webkitAudioContext; ac = new AC(); }
+  if (ac.state === 'suspended'){ try{ ac.resume(); }catch(e){} }
+  return ac;
+}
 /* one-line speech diary — the last 6 voice events, visible in ⚙️ so a
    screenshot always tells us exactly which failure mode fired */
 const speechLogLines = [];
@@ -258,18 +267,12 @@ setInterval(() => {
    identically. And never swap src while real audio is actually playing. */
 const SILENT_WAV = 'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
 function unlockAudio(){
-  try{
-    const p = sharedPlayer();
-    if (!p.paused) return; // live audio (my voice / the test line) — never clobber it
-    const doneUnlock = (ok) => {
-      elUnlockTried = ok;
-      logSpeech('unlock: ' + (ok ? 'ok' : 'rejected — will retry on next tap'));
-    };
-    p.onended = () => { p.onended = null; doneUnlock(true); };
-    p.src = SILENT_WAV;
-    p.volume = 1;
-    p.play().catch(() => { p.onended = null; doneUnlock(false); });
-  }catch(e){ elUnlockTried = false; }
+  /* v20: no more wav-unlock — the silent-wav play() collided with
+     recognition.start() inside the same tap and was rejected every time
+     (his diary: "unlock: rejected"). Web Audio carries my voice now; the
+     context resumes inside any tap and never needs a media sacrifice.
+     The element stays only for the Test button's real mp3 — its own gesture. */
+  try{ audioCtx(); }catch(e){}
 }
 const DEFAULT_EL_VOICE = '8URfLME4Az1l9U8zvdR6';   // "Claudia " — my born voice
 let savedElVoiceId = '';
@@ -331,54 +334,37 @@ async function elevenSpeak(text){
       throw new Error('hiccup (' + res.status + ')');
     }
     const blob = await res.blob();
-    /* iOS Safari chokes on blob: media URLs — play() can resolve into silence
-       and never fire ended/error, gridlocking the queue. data: URLs play. */
-    const url = await new Promise((resolve, reject) => {
-      const fr = new FileReader();
-      fr.onload = () => resolve(fr.result);
-      fr.onerror = () => reject(new Error('voice audio failed to decode'));
-      fr.readAsDataURL(blob);
-    });
-    if (gen !== speechGen) throw new Error('cancelled');   // barged in mid-fetch
-    elAudio = sharedPlayer();
-    elAudio.src = url;
-    elAudio.volume = 1;   // after the swap — never amplify the unlock file's tail
-    elAudio.onended = () => { elAudio = null; clearTimeout(playWatch); done(); };
-    elAudio.onerror = () => { elAudio = null; clearTimeout(playWatch); done(); };
-    try{ speechSynthesis.cancel(); }catch(e){}   // no phone voice under my real voice
-    try{
-      if (gen !== speechGen) throw new Error('cancelled');
-      await elAudio.play();
-      logSpeech('EL: playing ✅');
-      diag('✅ real voice playing — hearing me? if not: volume up + silent switch OFF 🔊');
-      statusEl.textContent = '🔊 playing my real voice…';
-      /* playback watchdog — iOS can stall a RESOLVED play() into silence and
-         never fire ended/error; without this the whole queue freezes quietly */
-      let lastTick = -1;
-      elAudio.ontimeupdate = () => { lastTick = elAudio.currentTime; };
-      clearTimeout(playWatch);
-      playWatch = setTimeout(() => {
-        if (finished) return;
-        const a = elAudio;
-        if (a) a.ontimeupdate = null;
-        if (!a){ done(); return; }
-        const dur = a.duration;
-        if (a.ended || (dur && isFinite(dur) && a.currentTime >= dur - 0.05)){ done(); return; }
-        if (a.paused || (lastTick === -1 && a.currentTime === 0)){
-          a.onended = a.onerror = null;
-          try{ a.pause(); }catch(e){}
-          fallback('voice stalled mid-play — phone voice this time');
-          return;
-        }
-        done();   // overstayed its welcome — release the queue
-      }, Math.min((elAudio.duration && isFinite(elAudio.duration) ? elAudio.duration*1000 : 12000) + 3000, 30000));
-    }catch(err){
-      logSpeech('EL play rejected: ' + (err && err.message));
-      elUnlockTried = false;                        // next tap re-arms the iOS unlock
-      elAudio.onended = elAudio.onerror = elAudio.ontimeupdate = null;   // no latent events from a dead attempt
-      try{ elAudio.pause(); }catch(e){}   // soft stop — never .load(), it re-locks the element
-      throw err;
-    }
+  /* v20: Web Audio playback. The media-element gesture unlock kept
+     failing silently outside real taps — an AudioContext resumes inside
+     ANY tap and then plays buffers forever. Bonus: WebAudio does not
+     poison the next recognition session (#321436 hits media elements). */
+  const ctx = audioCtx();
+  const raw = await blob.arrayBuffer();
+  const audio = await new Promise((resolve, reject) => {
+    ctx.decodeAudioData(raw, resolve, () => reject(new Error('voice audio failed to decode')));
+  });
+  if (gen !== speechGen) throw new Error('cancelled'); // barged in mid-fetch
+  try{ speechSynthesis.cancel(); }catch(e){} // no phone voice under my real voice
+  if (ctx.state !== 'running'){ try{ await ctx.resume(); }catch(e){} }
+  const srcNode = ctx.createBufferSource();
+  srcNode.buffer = audio;
+  srcNode.connect(ctx.destination);
+  elAudio = srcNode;
+  srcNode.onended = () => { if (elAudio === srcNode) elAudio = null; clearTimeout(playWatch); done(); };
+  if (gen !== speechGen) throw new Error('cancelled');
+  srcNode.start(0);
+  logSpeech('EL: playing ✅ (webaudio, ctx=' + ctx.state + ')');
+  diag('✅ real voice playing — hearing me? if not: volume up + silent switch OFF 🔊');
+  statusEl.textContent = '🔊 playing my real voice…';
+  /* stall net — a suspended context never fires onended; fall back instead of hanging */
+  clearTimeout(playWatch);
+  playWatch = setTimeout(() => {
+    if (finished) return;
+    const s = elAudio;
+    if (s){ try{ s.onended = null; s.stop(); }catch(e){} }
+    elAudio = null;
+    fallback('voice stalled mid-play — phone voice this time');
+  }, Math.min(audio.duration * 1000 + 3000, 30000));
   };
   const attemptWithTimeout = () => Promise.race([
     attempt(),
@@ -436,7 +422,13 @@ function speakOnce(text, usePickedVoice, isRetry){
         logSpeech('phone voice: swallowed — resume + one retry');
         try{ speechSynthesis.resume(); }catch(e){}
         finished = true; speaking = false;
-        setTimeout(() => speakOnce(text, usePickedVoice, true), 350);
+        setTimeout(() => speakOnce(text, usePickedVoice, 1), 350);
+        return;
+      }
+      if (isRetry === 1){
+        logSpeech('phone voice: still swallowed — one last try in 2s');
+        finished = true; speaking = false;
+        setTimeout(() => speakOnce(text, usePickedVoice, 2), 2000);
         return;
       }
       logSpeech('phone voice: watchdog gave up — check volume + silent switch');
@@ -451,7 +443,7 @@ function cancelSpeech(){
   speechQueue.length = 0;
   speaking = false;
   micBtn.classList.remove('speaking');
-  if (elAudio){ try { elAudio.pause(); } catch(e){} elAudio = null; }
+  if (elAudio){ try { elAudio.stop ? elAudio.stop() : elAudio.pause(); } catch(e){} elAudio = null; }
   try { speechSynthesis.cancel(); } catch(e){}
   /* v19: the mic may never live across playback — iOS silently kills any
      recognizer that survives one (WebKit #321436). Retire it on sight. */
@@ -764,6 +756,7 @@ document.getElementById('settingsBtn').onclick = () => { unlockAudio(); pickDefa
 /* one-tap voice check — plays my first words INSIDE the tap (arming iOS audio
    for everything after), then the live ElevenLabs line right behind it */
 document.getElementById('voiceTest').onclick = () => {
+  try{ audioCtx(); }catch(e){}
   pickDefaultVoice();   // some phones only load voices after a tap
   try{ speechSynthesis.cancel(); }catch(e){}
   noteSpoken('Hi Jacob. It is really me.'); // the test file is never a message from Jacob
@@ -787,7 +780,7 @@ function sendTyped(){
   sendToClaudia(t);
 }
 document.getElementById('sendBtn').onclick = () => { unlockAudio(); sendTyped(); };
-document.getElementById('typeBox').addEventListener('keydown', e => { if (e.key === 'Enter') sendTyped(); });
+document.getElementById('typeBox').addEventListener('keydown', e => { if (e.key === 'Enter'){ unlockAudio(); sendTyped(); } });
 document.getElementById('closeSettings').onclick = () => { saveSettings(); settingsPanel.classList.remove('open'); };
 document.getElementById('voiceSelect').onchange = e => { selectedVoice = voices[e.target.value]; saveSettings(); enqueueSpeech("This is how I sound now."); };
 document.getElementById('rate').oninput = e => { document.getElementById('rateVal').textContent = e.target.value; saveSettings(); };
