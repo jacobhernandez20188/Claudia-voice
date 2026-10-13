@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Claudia">
 <meta name="theme-color" content="#0b1020">
-<title>Claudia — Voice · v16</title>
+<title>Claudia — Voice · v17</title>
 <style>
   :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>Claudia 🎙️<span class="badge">v16 · ⚡ live stream</span></h1>
+  <h1>Claudia 🎙️<span class="badge">v17 · ⚡ live stream</span></h1>
   <div class="status" id="status">Tap the mic and talk to me</div>
 </header>
 <button id="settingsBtn">⚙️</button>
@@ -309,8 +309,8 @@ async function elevenSpeak(text){
     const url = URL.createObjectURL(blob);
     if (gen !== speechGen){ URL.revokeObjectURL(url); throw new Error('cancelled'); }   // barged in mid-fetch
     elAudio = sharedPlayer();
-    elAudio.volume = 1;
     elAudio.src = url;
+    elAudio.volume = 1;   // after the swap — never amplify the unlock file's tail
     elAudio.onended = () => { URL.revokeObjectURL(url); elAudio = null; clearTimeout(playWatch); done(); };
     elAudio.onerror = () => { URL.revokeObjectURL(url); elAudio = null; clearTimeout(playWatch); done(); };
     try{ speechSynthesis.cancel(); }catch(e){}   // no phone voice under my real voice
@@ -555,7 +555,7 @@ async function streamReply(url, key, text){
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
     body: JSON.stringify({
-      messages:[{role:'user', content:[{type:'text', text:text}]}],
+      messages:[{role:'user', content:[{type:'text', text: text + '\n\n[Voice app — reply out-loud style: 1–3 short warm sentences, vary your opening (not my name every time), no markdown, no lists.]'}]}],
       stream_tokens:true
     })
   });
