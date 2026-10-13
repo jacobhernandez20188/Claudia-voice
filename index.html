@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Claudia">
 <meta name="theme-color" content="#0b1020">
-<title>Claudia — Voice · v20</title>
+<title>Claudia — Voice · v21</title>
 <style>
   :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>Claudia 🎙️<span class="badge">v20 · 🎧 real voice</span></h1>
+  <h1>Claudia 🎙️<span class="badge">v21 · 🎛️ session diplomat</span></h1>
   <div class="status" id="status">Tap the mic and talk to me</div>
 </header>
 <button id="settingsBtn">⚙️</button>
@@ -232,6 +232,19 @@ function audioCtx(){
   if (ac.state === 'suspended'){ try{ ac.resume(); }catch(e){} }
   return ac;
 }
+
+/* v21: the mic holds the iOS audio session hostage after every listen —
+   playback then dies silently (real voice locked out, phone voice swallowed).
+   The Audio Session API lets us ask nicely: play-and-record while listening,
+   playback again before any voice speaks. */
+function setSession(type){
+  try{
+    if (navigator.audioSession && navigator.audioSession.type !== type){
+      navigator.audioSession.type = type;
+      logSpeech('audio session → ' + type);
+    }
+  }catch(e){ logSpeech('audio session: unsupported here'); }
+}
 /* one-line speech diary — the last 6 voice events, visible in ⚙️ so a
    screenshot always tells us exactly which failure mode fired */
 const speechLogLines = [];
@@ -345,7 +358,15 @@ async function elevenSpeak(text){
   });
   if (gen !== speechGen) throw new Error('cancelled'); // barged in mid-fetch
   try{ speechSynthesis.cancel(); }catch(e){} // no phone voice under my real voice
-  if (ctx.state !== 'running'){ try{ await ctx.resume(); }catch(e){} }
+  setSession('playback'); // v21: the mic's turn is over — the speaker is mine
+  if (ctx.state !== 'running'){
+    /* iOS may refuse to resume outside a tap — race it with a 1.2s deadline
+       so a stuck context means a fast phone-voice fallback, not a 12s hang */
+    try{ await Promise.race([ctx.resume(), new Promise(r => setTimeout(r, 1200))]); }catch(e){}
+  }
+  if (ctx.state !== 'running'){
+    throw new Error('audio context stuck (' + ctx.state + ')');
+  }
   const srcNode = ctx.createBufferSource();
   srcNode.buffer = audio;
   srcNode.connect(ctx.destination);
@@ -387,6 +408,8 @@ async function elevenSpeak(text){
   }
 }
 function speakOnce(text, usePickedVoice, isRetry){
+  setSession('playback'); // v21: reclaim the speaker before the phone voice talks
+  try{ speechSynthesis.resume(); }catch(e){}
   const u = new SpeechSynthesisUtterance(text);
   if (usePickedVoice && selectedVoice) u.voice = selectedVoice;
   u.rate = parseFloat(document.getElementById('rate').value);
@@ -536,6 +559,7 @@ function startListening(){
   recognition = initRecognition();
   if (!recognition) return;
   cancelSpeech();
+  setSession('play-and-record'); // v21: mic + speaker both live while listening
   try { recognition.start(); } catch(e){
     try{ recognition.stop(); }catch(e2){}
     setTimeout(() => { try{ recognition && recognition.start(); }catch(e3){} }, 300);
