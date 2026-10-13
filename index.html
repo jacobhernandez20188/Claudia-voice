@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Claudia">
 <meta name="theme-color" content="#0b1020">
-<title>Claudia — Voice · v21</title>
+<title>Claudia — Voice · v22</title>
 <style>
   :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>Claudia 🎙️<span class="badge">v21 · 🎛️ session diplomat</span></h1>
+  <h1>Claudia 🎙️<span class="badge">v22 · 🪓 clean cuts</span></h1>
   <div class="status" id="status">Tap the mic and talk to me</div>
 </header>
 <button id="settingsBtn">⚙️</button>
@@ -380,12 +380,21 @@ async function elevenSpeak(text){
   /* stall net — a suspended context never fires onended; fall back instead of hanging */
   clearTimeout(playWatch);
   playWatch = setTimeout(() => {
-    if (finished) return;
+    if (gen !== speechGen || finished) return;
     const s = elAudio;
     if (s){ try{ s.onended = null; s.stop(); }catch(e){} }
     elAudio = null;
     fallback('voice stalled mid-play — phone voice this time');
-  }, Math.min(audio.duration * 1000 + 3000, 30000));
+  }, Math.min(audio.duration * 1000 + 1500, 12000));
+  /* v22: if the context dies mid-play (interruption, battery alert), notice fast */
+  setTimeout(() => {
+    if (gen !== speechGen || finished) return;
+    if (ctx.state !== 'running' && elAudio){
+      const s = elAudio; try{ s.onended = null; s.stop(); }catch(e){}
+      elAudio = null;
+      fallback('voice froze mid-play — phone voice this time');
+    }
+  }, 1500);
   };
   const attemptWithTimeout = () => Promise.race([
     attempt(),
@@ -408,9 +417,11 @@ async function elevenSpeak(text){
   }
 }
 function speakOnce(text, usePickedVoice, isRetry){
+  const myGen = speechGen; // v22: a stale retry timer must never cut off a NEWER voice
   setSession('playback'); // v21: reclaim the speaker before the phone voice talks
   try{ speechSynthesis.resume(); }catch(e){}
   const u = new SpeechSynthesisUtterance(text);
+  u.volume = 1; // explicit — never inherit a muted utterance
   if (usePickedVoice && selectedVoice) u.voice = selectedVoice;
   u.rate = parseFloat(document.getElementById('rate').value);
   u.pitch = parseFloat(document.getElementById('pitch').value);
@@ -445,13 +456,13 @@ function speakOnce(text, usePickedVoice, isRetry){
         logSpeech('phone voice: swallowed — resume + one retry');
         try{ speechSynthesis.resume(); }catch(e){}
         finished = true; speaking = false;
-        setTimeout(() => speakOnce(text, usePickedVoice, 1), 350);
+        setTimeout(() => { if (myGen === speechGen) speakOnce(text, usePickedVoice, 1); }, 350);
         return;
       }
       if (isRetry === 1){
         logSpeech('phone voice: still swallowed — one last try in 2s');
         finished = true; speaking = false;
-        setTimeout(() => speakOnce(text, usePickedVoice, 2), 2000);
+        setTimeout(() => { if (myGen === speechGen) speakOnce(text, usePickedVoice, 2); }, 2000);
         return;
       }
       logSpeech('phone voice: watchdog gave up — check volume + silent switch');
@@ -527,7 +538,7 @@ function initRecognition(){
       /* v19 echo wall: while MY voice is playing, anything the mic "hears"
          is speaker bleed, not Jacob — iOS can't barge in by voice anyway
          (WebKit #321436). Tap-to-interrupt is the door; the mic isn't. */
-      if (speaking || elAudio){
+      if (elAudio || speechSynthesis.speaking){ // v22: wall only while audio truly plays
         discardDraft();
         logSpeech('mic: ignored audio heard over my own voice');
         statusEl.textContent = 'That was me talking 😅 — tap when I finish';
@@ -903,7 +914,7 @@ document.getElementById('testBrain').onclick = async () => {
       body: JSON.stringify({ messages:[{role:'user', content:[{type:'text', text:'ping \u2014 just testing our connection'}]}], stream_tokens:true })
     });
     if (res.ok){ out.textContent = '\u2705 Connected. You are talking to the real me now.'; out.style.color = 'var(--ok)'; }
-    else { out.textContent = '\u274c step 2: stream answered ' + res.status; out.style.color = 'var(--err)'; }
+    else { out.textContent = (r.status === 409) ? '\u2705 brain reachable — 409 just means I was mid-thought, test again in a breath' : '\u274c step 2: stream answered ' + r.status; out.style.color = 'var(--err)'; }
   }catch(e){
     out.textContent = '\u274c ' + e.name + ': ' + e.message;
     out.style.color = 'var(--err)';
