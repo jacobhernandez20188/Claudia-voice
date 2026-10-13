@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Claudia">
 <meta name="theme-color" content="#0b1020">
-<title>Claudia — Voice · v23</title>
+<title>Claudia — Voice · v24</title>
 <style>
   :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>Claudia 🎙️<span class="badge">v23 · ⏳ wake-up call</span></h1>
+  <h1>Claudia 🎙️<span class="badge">v24 · 💓 heartbeat</span></h1>
   <div class="status" id="status">Tap the mic and talk to me</div>
 </header>
 <button id="settingsBtn">⚙️</button>
@@ -245,6 +245,54 @@ function setSession(type){
     }
   }catch(e){ logSpeech('audio session: unsupported here'); }
 }
+
+/* v24: THE HEARTBEAT — a silent (gain 0) loop keeps the AudioContext
+   actively rendering through recognition and the thinking gap, so iOS
+   never suspends it. My voice then plays on a context that never slept. */
+let heartbeatNode = null, attemptBlob = null;
+function startHeartbeat(){
+  try{
+    const ctx = audioCtx();
+    if (heartbeatNode || !ctx) return;
+    const srcb = ctx.createBufferSource();
+    srcb.buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 2), ctx.sampleRate);
+    srcb.loop = true;
+    const g = ctx.createGain(); g.gain.value = 0;
+    srcb.connect(g); g.connect(ctx.destination);
+    srcb.start(0);
+    heartbeatNode = srcb;
+  }catch(e){}
+}
+function stopHeartbeat(){ try{ if (heartbeatNode){ heartbeatNode.stop(); } }catch(e){} heartbeatNode = null; }
+
+/* v24: THE TAP THAT CANNOT FAIL — if my voice was fetched but can't play
+   (context stuck), offer one big button. A real tap is the one gesture
+   every iPhone obeys: the element plays my voice in-gesture, every time. */
+let hearBtn = null, hearCssDone = false;
+function removeHearButton(){ try{ if (hearBtn) hearBtn.remove(); }catch(e){} hearBtn = null; }
+function showHearButton(blob){
+  removeHearButton();
+  if (!hearCssDone){
+    const st = document.createElement('style');
+    st.textContent = '@keyframes hearPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}';
+    document.head.appendChild(st); hearCssDone = true;
+  }
+  const url = URL.createObjectURL(blob);
+  hearBtn = document.createElement('button');
+  hearBtn.textContent = '🔊 tap to hear me';
+  hearBtn.style.cssText = 'display:block;margin:14px auto 0;padding:14px 30px;border-radius:999px;border:0;background:linear-gradient(135deg,#7c6cff,#b48cff);color:#fff;font-size:18px;font-weight:700;animation:hearPulse 1.2s infinite;cursor:pointer;';
+  hearBtn.onclick = () => {
+    try{ audioCtx(); }catch(e){}
+    cancelSpeech(); // stop any struggling phone voice first
+    const p = sharedPlayer();
+    p.src = url; p.volume = 1;
+    p.onended = () => { p.onended = null; removeHearButton(); };
+    p.play().then(() => { logSpeech('tap-to-hear: playing ✅'); removeHearButton(); })
+            .catch(e => { logSpeech('tap-to-hear: rejected (' + (e.name || 'err') + ')'); if (hearBtn) hearBtn.textContent = '🔊 tap again to hear me'; });
+  };
+  micBtn.parentNode.insertBefore(hearBtn, micBtn.nextSibling);
+  logSpeech('tap-to-hear: button ready — one tap plays my voice');
+}
 /* one-line speech diary — the last 6 voice events, visible in ⚙️ so a
    screenshot always tells us exactly which failure mode fired */
 const speechLogLines = [];
@@ -321,7 +369,9 @@ async function elevenSpeak(text){
     const d = document.getElementById('voiceDiag');
     if (d) d.textContent = msg;   // sticks in ⚙️ so a screenshot tells us everything
   };
-  const fallback = (note) => {
+  const fallback = (note, theBlob) => {
+    const fbBlob = theBlob || attemptBlob || null;
+    if (fbBlob){ try{ showHearButton(fbBlob); }catch(e){} } // v24: the tap that cannot fail
     if (note) { statusEl.textContent = note; diag(note); logSpeech('→ ' + note); }
     finished = true;
     speaking = false;
@@ -346,7 +396,8 @@ async function elevenSpeak(text){
       if (res.status === 429) throw new Error('out of sparkle for this month (429) ✨');
       throw new Error('hiccup (' + res.status + ')');
     }
-    const blob = await res.blob();
+    attemptBlob = await res.blob();
+  const blob = attemptBlob;
   /* v20: Web Audio playback. The media-element gesture unlock kept
      failing silently outside real taps — an AudioContext resumes inside
      ANY tap and then plays buffers forever. Bonus: WebAudio does not
@@ -373,6 +424,8 @@ async function elevenSpeak(text){
   elAudio = srcNode;
   srcNode.onended = () => { if (elAudio === srcNode) elAudio = null; clearTimeout(playWatch); done(); };
   if (gen !== speechGen) throw new Error('cancelled');
+  stopHeartbeat(); // the heartbeat rests only when the real voice takes the stage
+  removeHearButton();
   srcNode.start(0);
   logSpeech('EL: playing ✅ (webaudio, ctx=' + ctx.state + ')');
   diag('✅ real voice playing — hearing me? if not: volume up + silent switch OFF 🔊');
@@ -384,7 +437,7 @@ async function elevenSpeak(text){
     const s = elAudio;
     if (s){ try{ s.onended = null; s.stop(); }catch(e){} }
     elAudio = null;
-    fallback('voice stalled mid-play — phone voice this time');
+    fallback('voice stalled mid-play — phone voice this time', blob);
   }, Math.min(audio.duration * 1000 + 1500, 12000));
   /* v23: watch for a mid-play context death — but give iOS grace to
      auto-resume (a suspended ctx CONTINUES where it left off), and only
@@ -399,7 +452,7 @@ async function elevenSpeak(text){
         clearInterval(freezeIv);
         const s = elAudio; try{ s.onended = null; s.stop(); }catch(e){}
         elAudio = null;
-        fallback('voice froze mid-play — phone voice this time');
+        fallback('voice froze mid-play — phone voice this time', blob);
       }
     } else { frozenStrikes = 0; }
   }, 2000);
@@ -486,6 +539,7 @@ function cancelSpeech(){
   speaking = false;
   micBtn.classList.remove('speaking');
   if (elAudio){ try { elAudio.stop ? elAudio.stop() : elAudio.pause(); } catch(e){} elAudio = null; }
+  stopHeartbeat();
   try { speechSynthesis.cancel(); } catch(e){}
   /* v19: the mic may never live across playback — iOS silently kills any
      recognizer that survives one (WebKit #321436). Retire it on sight. */
@@ -579,6 +633,7 @@ function startListening(){
   if (!recognition) return;
   cancelSpeech();
   setSession('play-and-record'); // v21: mic + speaker both live while listening
+  startHeartbeat(); // v24: keep the context rendering through the mic's turn
   try { recognition.start(); } catch(e){
     try{ recognition.stop(); }catch(e2){}
     setTimeout(() => { try{ recognition && recognition.start(); }catch(e3){} }, 300);
