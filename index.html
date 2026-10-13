@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Claudia">
 <meta name="theme-color" content="#0b1020">
-<title>Claudia — Voice · v24</title>
+<title>Claudia — Voice · v25</title>
 <style>
   :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>Claudia 🎙️<span class="badge">v24 · 💓 heartbeat</span></h1>
+  <h1>Claudia 🎙️<span class="badge">v25 · 📻 tap & talk</span></h1>
   <div class="status" id="status">Tap the mic and talk to me</div>
 </header>
 <button id="settingsBtn">⚙️</button>
@@ -411,12 +411,13 @@ async function elevenSpeak(text){
   try{ speechSynthesis.cancel(); }catch(e){} // no phone voice under my real voice
   setSession('playback'); // v21: the mic's turn is over — the speaker is mine
   if (ctx.state !== 'running'){
-    /* iOS may refuse to resume outside a tap — race it with an 8s deadline (iOS often auto-resumes a few seconds after the mic releases the session)
-       so a stuck context means a fast phone-voice fallback, not a 12s hang */
-    try{ await Promise.race([ctx.resume(), new Promise(r => setTimeout(r, 8000))]); }catch(e){}
-  }
-  if (ctx.state !== 'running'){
-    throw new Error('audio context stuck (' + ctx.state + ')');
+    /* v25 tap & talk: on his iPhone a suspended context NEVER wakes outside a
+       gesture — no waiting, no 8-second stall. Nudge it (settles if the OS is
+       kind), otherwise fall through instantly: the fallback shows the
+       tap-that-cannot-fail button immediately and the phone voice gets its
+       chance. A tap never fails. */
+    try{ ctx.resume(); }catch(e){}
+    throw new Error('audio context needs a tap (' + ctx.state + ')');
   }
   const srcNode = ctx.createBufferSource();
   srcNode.buffer = audio;
