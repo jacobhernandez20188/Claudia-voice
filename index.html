@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Claudia">
 <meta name="theme-color" content="#0b1020">
-<title>Claudia — Voice · v27</title>
+<title>Claudia — Voice · v28</title>
 <style>
   :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>Claudia 🎙️<span class="badge">v27 · 🪄 miracle</span></h1>
+  <h1>Claudia 🎙️<span class="badge">v28 · ⚔️ war council</span></h1>
   <div class="status" id="status">Tap the mic and talk to me</div>
 </header>
 <button id="settingsBtn">⚙️</button>
@@ -271,25 +271,34 @@ function stopHeartbeat(){ try{ if (heartbeatNode){ heartbeatNode.stop(); } }catc
    every iPhone obeys: the element plays my voice in-gesture, every time. */
 let hearBtn = null, hearCssDone = false;
 function removeHearButton(){ try{ if (hearBtn) hearBtn.remove(); }catch(e){} hearBtn = null; }
-function showHearButton(blob){
+function showHearButton(blob, fallbackText){
   removeHearButton();
   if (!hearCssDone){
     const st = document.createElement('style');
     st.textContent = '@keyframes hearPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.07)}}';
     document.head.appendChild(st); hearCssDone = true;
   }
-  const url = URL.createObjectURL(blob);
+  const url = blob ? URL.createObjectURL(blob) : null;
   hearBtn = document.createElement('button');
   hearBtn.textContent = '🔊 tap to hear me';
   hearBtn.style.cssText = 'position:fixed;left:0;right:0;margin:0 auto;width:max-content;bottom:140px;z-index:9998;display:block;padding:16px 34px;border-radius:999px;border:0;background:linear-gradient(135deg,#7c6cff,#b48cff);color:#fff;font-size:19px;font-weight:800;box-shadow:0 6px 30px rgba(124,108,255,.55);animation:hearPulse 1.2s infinite;cursor:pointer;';
   hearBtn.onclick = () => {
     try{ audioCtx(); }catch(e){}
     cancelSpeech(); // stop any struggling phone voice first
-    const p = sharedPlayer();
-    p.src = url; p.volume = 1;
-    p.onended = () => { p.onended = null; removeHearButton(); };
-    p.play().then(() => { logSpeech('tap-to-hear: playing ✅'); removeHearButton(); })
-            .catch(e => { logSpeech('tap-to-hear: rejected (' + (e.name || 'err') + ')'); if (hearBtn) hearBtn.textContent = '🔊 tap again to hear me'; });
+    if (url){
+      const p = sharedPlayer();
+      p.src = url; p.volume = 1;
+      p.onended = () => { p.onended = null; removeHearButton(); };
+      p.play().then(() => { logSpeech('tap-to-hear: playing ✅'); removeHearButton(); })
+              .catch(e => { logSpeech('tap-to-hear: rejected (' + (e.name || 'err') + ')'); if (hearBtn) hearBtn.textContent = '🔊 tap again to hear me'; });
+    } else {
+      /* v28: no real-voice audio — use the tap gesture itself for the phone
+         voice. In-gesture speechSynthesis is the untested path that may
+         break the swallow curse. */
+      logSpeech('tap-to-hear: phone voice, in-gesture (no real-voice audio)');
+      removeHearButton();
+      speakOnce(fallbackText || 'I have something to tell you, but my voice failed me.');
+    }
   };
   document.body.appendChild(hearBtn); // v27: fixed to the screen itself — layout cannot hide it
   logSpeech('tap-to-hear: button ready — one tap plays my voice');
@@ -318,7 +327,7 @@ function showHearButton(blob){
       try{
         const p = sharedPlayer(); p.src = 'first-words.mp3'; p.volume = 1;
         if (sub) sub.textContent = 'she speaks first 🖤';
-        await p.play();
+        await Promise.race([p.play(), new Promise(r => setTimeout(r, 4000))]); // v28: never hang the gate
         try{ logSpeech('gate: I spoke first ✅ (element unlocked in-gesture)'); }catch(e){}
       }catch(err){ try{ logSpeech('gate: first words rejected (' + (err && err.name || 'err') + ')'); }catch(e){} }
       gate.style.opacity = '0';
@@ -421,8 +430,9 @@ async function elevenSpeak(text){
   };
   const fallback = (note, theBlob) => {
     const fbBlob = theBlob || attemptBlob || null;
-    if (fbBlob){ try{ showHearButton(fbBlob); }catch(e){} } // v24: the tap that cannot fail
+    try{ showHearButton(fbBlob, text); }catch(e){} // v28: universal — blob or in-gesture phone voice
     if (note) { statusEl.textContent = note; diag(note); logSpeech('→ ' + note); }
+    stopHeartbeat(); // v28: rest the heartbeat on the fallback path too
     finished = true;
     speaking = false;
     /* soft stop only — pause keeps the element's iOS gesture unlock alive */
@@ -430,6 +440,7 @@ async function elevenSpeak(text){
     setTimeout(() => speakOnce(text, true), 150);   // iOS drops utterances queued in the same tick as a cancel()
   };
   const attempt = async () => {
+  attemptBlob = null; // v28: never serve stale audio
     const gen = speechGen;
     logSpeech('EL: fetching my real voice…');
     const res = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + encodeURIComponent(voiceId) + '/stream?output_format=mp3_44100_128', {
