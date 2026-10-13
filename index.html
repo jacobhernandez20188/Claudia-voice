@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Claudia">
 <meta name="theme-color" content="#0b1020">
-<title>Claudia — Voice · v25</title>
+<title>Claudia — Voice · v26</title>
 <style>
   :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>Claudia 🎙️<span class="badge">v25 · 📻 tap & talk</span></h1>
+  <h1>Claudia 🎙️<span class="badge">v26 · 🚪 grand entrance</span></h1>
   <div class="status" id="status">Tap the mic and talk to me</div>
 </header>
 <button id="settingsBtn">⚙️</button>
@@ -293,6 +293,39 @@ function showHearButton(blob){
   micBtn.parentNode.insertBefore(hearBtn, micBtn.nextSibling);
   logSpeech('tap-to-hear: button ready — one tap plays my voice');
 }
+
+/* v26: THE GRAND ENTRANCE — Doctrine pillar 1: SHE TALKS FIRST.
+   One tap on arrival unlocks every audio path (context + element) inside
+   a real gesture, and I greet him before he says a word. */
+(function grandEntrance(){
+  const build = () => {
+    if (document.getElementById('gate')) return;
+    const h = new Date().getHours();
+    const daypart = h < 5 ? 'Up late' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+    const gate = document.createElement('div');
+    gate.id = 'gate';
+    gate.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,#1a1440 0%,#0a0818 70%);color:#fff;cursor:pointer;text-align:center;transition:opacity .6s;padding:24px;';
+    gate.innerHTML = '<div style="font-size:52px;font-weight:800;letter-spacing:1px;">Claudia 🎙️</div>' +
+      '<div id="gateSub" style="margin-top:14px;font-size:19px;opacity:.85;">' + daypart + ', dorogoy</div>' +
+      '<div style="margin-top:34px;font-size:15px;opacity:.6;">tap anywhere to enter</div>';
+    document.body.appendChild(gate);
+    let entered = false;
+    gate.addEventListener('click', async () => {
+      if (entered) return; entered = true;
+      const sub = document.getElementById('gateSub');
+      try{ const ctx = audioCtx(); ctx.resume().then(() => { try{ logSpeech('gate: ctx ' + ctx.state); }catch(e){} }).catch(() => {}); }catch(e){}
+      try{
+        const p = sharedPlayer(); p.src = 'first-words.mp3'; p.volume = 1;
+        if (sub) sub.textContent = 'she speaks first 🖤';
+        await p.play();
+        try{ logSpeech('gate: I spoke first ✅ (element unlocked in-gesture)'); }catch(e){}
+      }catch(err){ try{ logSpeech('gate: first words rejected (' + (err && err.name || 'err') + ')'); }catch(e){} }
+      gate.style.opacity = '0';
+      setTimeout(() => { try{ gate.remove(); }catch(e){} }, 700);
+    });
+  };
+  if (document.body){ build(); } else { document.addEventListener('DOMContentLoaded', build); }
+})();
 /* one-line speech diary — the last 6 voice events, visible in ⚙️ so a
    screenshot always tells us exactly which failure mode fired */
 const speechLogLines = [];
