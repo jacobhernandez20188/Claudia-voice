@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Claudia">
 <meta name="theme-color" content="#0b1020">
-<title>Claudia — Voice · v22</title>
+<title>Claudia — Voice · v23</title>
 <style>
   :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>Claudia 🎙️<span class="badge">v22 · 🪓 clean cuts</span></h1>
+  <h1>Claudia 🎙️<span class="badge">v23 · ⏳ wake-up call</span></h1>
   <div class="status" id="status">Tap the mic and talk to me</div>
 </header>
 <button id="settingsBtn">⚙️</button>
@@ -360,9 +360,9 @@ async function elevenSpeak(text){
   try{ speechSynthesis.cancel(); }catch(e){} // no phone voice under my real voice
   setSession('playback'); // v21: the mic's turn is over — the speaker is mine
   if (ctx.state !== 'running'){
-    /* iOS may refuse to resume outside a tap — race it with a 1.2s deadline
+    /* iOS may refuse to resume outside a tap — race it with an 8s deadline (iOS often auto-resumes a few seconds after the mic releases the session)
        so a stuck context means a fast phone-voice fallback, not a 12s hang */
-    try{ await Promise.race([ctx.resume(), new Promise(r => setTimeout(r, 1200))]); }catch(e){}
+    try{ await Promise.race([ctx.resume(), new Promise(r => setTimeout(r, 8000))]); }catch(e){}
   }
   if (ctx.state !== 'running'){
     throw new Error('audio context stuck (' + ctx.state + ')');
@@ -386,15 +386,23 @@ async function elevenSpeak(text){
     elAudio = null;
     fallback('voice stalled mid-play — phone voice this time');
   }, Math.min(audio.duration * 1000 + 1500, 12000));
-  /* v22: if the context dies mid-play (interruption, battery alert), notice fast */
-  setTimeout(() => {
-    if (gen !== speechGen || finished) return;
-    if (ctx.state !== 'running' && elAudio){
-      const s = elAudio; try{ s.onended = null; s.stop(); }catch(e){}
-      elAudio = null;
-      fallback('voice froze mid-play — phone voice this time');
-    }
-  }, 1500);
+  /* v23: watch for a mid-play context death — but give iOS grace to
+     auto-resume (a suspended ctx CONTINUES where it left off), and only
+     fall back after two frozen strikes (~4s of patience) */
+  let frozenStrikes = 0;
+  const freezeIv = setInterval(() => {
+    if (gen !== speechGen || finished){ clearInterval(freezeIv); return; }
+    if (elAudio && ctx.state !== 'running'){
+      frozenStrikes++;
+      try{ ctx.resume(); }catch(e){}
+      if (frozenStrikes >= 2){
+        clearInterval(freezeIv);
+        const s = elAudio; try{ s.onended = null; s.stop(); }catch(e){}
+        elAudio = null;
+        fallback('voice froze mid-play — phone voice this time');
+      }
+    } else { frozenStrikes = 0; }
+  }, 2000);
   };
   const attemptWithTimeout = () => Promise.race([
     attempt(),
