@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Claudia">
 <meta name="theme-color" content="#0b1020">
-<title>Claudia — Voice · v17</title>
+<title>Claudia — Voice · v18</title>
 <style>
   :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>Claudia 🎙️<span class="badge">v17 · ⚡ live stream</span></h1>
+  <h1>Claudia 🎙️<span class="badge">v18 · ⚡ live stream</span></h1>
   <div class="status" id="status">Tap the mic and talk to me</div>
 </header>
 <button id="settingsBtn">⚙️</button>
@@ -74,6 +74,7 @@
     <svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg>
   </button>
   <div class="hint" id="hint">Tap to talk, or type to me</div>
+    <div id="speechEcho" style="font-size:.62rem;color:var(--dim);opacity:.75;max-width:330px;text-align:center;min-height:.8rem"></div>
   <button id="voiceTest">🔊 Test my voice</button>
 </div>
 
@@ -229,7 +230,26 @@ function logSpeech(ev){
   if (speechLogLines.length > 6) speechLogLines.shift();
   const d = document.getElementById('speechLog');
   if (d) d.textContent = speechLogLines.join('\n');
+  const e2 = document.getElementById('speechEcho');   // mirror the latest line on the main screen
+  if (e2) e2.textContent = speechLogLines[speechLogLines.length - 1] || '';
 }
+
+/* ironclad unstick: NO voice episode may outlive 40s, whatever went wrong.
+   One stuck utterance used to gridlock every reply after it — never again. */
+let speakingSince = 0;
+setInterval(() => {
+  if (speaking){
+    if (!speakingSince) speakingSince = Date.now();
+    if (Date.now() - speakingSince > 40000){
+      speaking = false; speakingSince = 0;
+      micBtn.classList.remove('speaking');
+      logSpeech('watchdog: force-cleared a stuck voice');
+      try{ sharedPlayer().pause(); }catch(e){}
+      try{ speechSynthesis.cancel(); }catch(e){}
+      pumpSpeech();
+    }
+  } else speakingSince = 0;
+}, 5000);
 /* v16: prime the shared element INSIDE every real tap — the file plays at
    whisper volume to its NATURAL END (pausing can undo the iOS unlock).
    A rejected play re-arms automatically so the next tap tries again. */
@@ -306,13 +326,20 @@ async function elevenSpeak(text){
       throw new Error('hiccup (' + res.status + ')');
     }
     const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    if (gen !== speechGen){ URL.revokeObjectURL(url); throw new Error('cancelled'); }   // barged in mid-fetch
+    /* iOS Safari chokes on blob: media URLs — play() can resolve into silence
+       and never fire ended/error, gridlocking the queue. data: URLs play. */
+    const url = await new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(fr.result);
+      fr.onerror = () => reject(new Error('voice audio failed to decode'));
+      fr.readAsDataURL(blob);
+    });
+    if (gen !== speechGen) throw new Error('cancelled');   // barged in mid-fetch
     elAudio = sharedPlayer();
     elAudio.src = url;
     elAudio.volume = 1;   // after the swap — never amplify the unlock file's tail
-    elAudio.onended = () => { URL.revokeObjectURL(url); elAudio = null; clearTimeout(playWatch); done(); };
-    elAudio.onerror = () => { URL.revokeObjectURL(url); elAudio = null; clearTimeout(playWatch); done(); };
+    elAudio.onended = () => { elAudio = null; clearTimeout(playWatch); done(); };
+    elAudio.onerror = () => { elAudio = null; clearTimeout(playWatch); done(); };
     try{ speechSynthesis.cancel(); }catch(e){}   // no phone voice under my real voice
     try{
       if (gen !== speechGen) throw new Error('cancelled');
