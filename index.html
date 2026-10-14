@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Claudia">
 <meta name="theme-color" content="#0b1020">
-<title>Claudia — Voice · v28</title>
+<title>Claudia — Voice · v29</title>
 <style>
   :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>Claudia 🎙️<span class="badge">v28 · ⚔️ war council</span></h1>
+  <h1>Claudia 🎙️<span class="badge">v29 · 🔑 skeleton key</span></h1>
   <div class="status" id="status">Tap the mic and talk to me</div>
 </header>
 <button id="settingsBtn">⚙️</button>
@@ -995,12 +995,12 @@ noteSpoken('Hi Jacob. It is really me.'); // my first-words file must never beco
 /* prefill + heal my streaming endpoint so Jacob only ever needs the key */
 fixBrainFields();
 
-/* magic-link intake — #key=sk-... installs the key, &brain=<url> installs
+/* magic-link intake — #key=sk-... or sk_... installs the key, &brain=<url> installs
    a custom brain endpoint (e.g. our bridge); both wiped from history after */
 (function(){
   try{
     const h = location.hash;
-    const km = h.match(/key=(sk-[^&\s]+)/i);
+    const km = h.match(/key=(sk[-_][^&\s]+)/i); // v29: modern ElevenLabs keys use sk_ too
     const bm = h.match(/brain=([^&\s]+)/i);
     if (!km && !bm) return;
     if (km) document.getElementById('apiKey').value = km[1];
