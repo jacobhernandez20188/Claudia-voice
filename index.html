@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Claudia">
 <meta name="theme-color" content="#0b1020">
-<title>Claudia — Voice · v31</title>
+<title>Claudia — Voice · v32</title>
 <style>
   :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>Claudia 🎙️<span class="badge">v31 · 🩹 link doctor</span></h1>
+  <h1>Claudia 🎙️<span class="badge">v32 · 🔬 key surgeon</span></h1>
   <div class="status" id="status">Tap the mic and talk to me</div>
 </header>
 <button id="settingsBtn">⚙️</button>
@@ -1000,7 +1000,7 @@ fixBrainFields();
 (function(){
   try{
     const h = location.hash;
-    const km = h.match(/key=(sk[-_][^&\s]+)/i); // v29: modern ElevenLabs keys use sk_ too
+    const km = h.match(/(?:^|[#&])key=(sk[-_][^&\s]+)/i); // v32: word boundary — elkey= must never leak into the brain key
     const em = h.match(/elkey=(sk[-_][^&\s]+)/i); // v30: the voice key rides the link too
     const bm = h.match(/brain=([^&\s]+)/i);
     if (!km && !bm && !em) return;
