@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Claudia">
 <meta name="theme-color" content="#0b1020">
-<title>Claudia — Voice · v32</title>
+<title>Claudia — Voice · v33</title>
 <style>
   :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>Claudia 🎙️<span class="badge">v32 · 🔬 key surgeon</span></h1>
+  <h1>Claudia 🎙️<span class="badge">v33 · 🕵️ deep diary</span></h1>
   <div class="status" id="status">Tap the mic and talk to me</div>
 </header>
 <button id="settingsBtn">⚙️</button>
@@ -346,7 +346,7 @@ function showHearButton(blob, fallbackText){
     const badgeEl = document.querySelector('.badge');
     const diagEl = document.getElementById('voiceDiag');
     const msg = '📡 VOICE DIARY from Jacob\'s phone — badge: ' + (badgeEl ? badgeEl.textContent : '?') +
-      ' · diary: ' + (speechLogLines.slice(-6).join(' | ') || '(empty)') +
+      ' · diary: ' + (speechLogLines.slice(-20).join(' | ') || '(empty)') +
       (diagEl && diagEl.textContent ? ' · diag: ' + diagEl.textContent : '');
     try{ sendToClaudia(msg); logSpeech('📡 diary beamed to Claudia'); }
     catch(e){ logSpeech('📡 beam failed: ' + (e && e.message || e)); }
@@ -357,7 +357,7 @@ function showHearButton(blob, fallbackText){
 const speechLogLines = [];
 function logSpeech(ev){
   speechLogLines.push(new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}) + ' ' + ev);
-  if (speechLogLines.length > 6) speechLogLines.shift();
+  if (speechLogLines.length > 40) speechLogLines.shift(); // v33: deep diary — the EL evidence kept scrolling away
   const d = document.getElementById('speechLog');
   if (d) d.textContent = speechLogLines.join('\n');
   const e2 = document.getElementById('speechEcho');   // mirror the latest line on the main screen
