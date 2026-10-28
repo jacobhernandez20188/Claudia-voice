@@ -58,7 +58,7 @@
 </head>
 <body>
 <header>
-  <h1>Claudia 🎙️<span class="badge">v33 · 🕵️ deep diary</span></h1>
+  <h1>Claudia 🎙️<span class="badge">v34 · 🔊 loudspeaker gambit</span></h1>
   <div class="status" id="status">Tap the mic and talk to me</div>
 </header>
 <button id="settingsBtn">⚙️</button>
@@ -247,6 +247,61 @@ function setSession(type){
   }catch(e){ logSpeech('audio session: unsupported here'); }
 }
 
+/* v34: THE LOUDSPEAKER GAMBIT — after a mic session iOS can pin every sound
+   to the tiny earpiece speaker (the phone-call one), even after the session
+   type flips back to 'playback'. Two weapons: (1) flip the session AWAY and
+   back — a real category change is what re-routes audio, re-setting the same
+   type is a no-op; (2) a best-effort silent blip through a media element,
+   because media playback forces the media category → loudspeaker. If the
+   blip is rejected we lose nothing — the voice plays on. */
+let primeEl = null;
+function primeLoudspeaker(){
+  try{ setSession('auto'); setSession('playback'); }catch(e){}
+  try{
+    if (!primeEl){ primeEl = document.createElement('audio'); primeEl.src = SILENT_WAV; primeEl.preload = 'auto'; }
+    primeEl.currentTime = 0;
+    const p = primeEl.play();
+    if (p && p.then) p.then(() => logSpeech('prime: loudspeaker blip ✅'))
+                      .catch(e => logSpeech('prime: blip rejected (' + (e && e.name || 'err') + ') — voice plays on'));
+  }catch(e){ logSpeech('prime: ' + (e && e.message || 'err')); }
+}
+
+/* v34: THE VERDICT — one tap tells my brain WHERE my voice came out. The
+   earpiece mystery can only be solved by the ear on the other end of the
+   phone. Appears after a reply, hides itself after 75 seconds. */
+let verdictRow = null, verdictTimer = null;
+function askVerdict(){
+  try{
+    if (verdictRow) verdictRow.remove();
+    verdictRow = document.createElement('div');
+    verdictRow.style.cssText = 'position:fixed;left:0;right:0;bottom:190px;z-index:9997;display:flex;gap:8px;justify-content:center;align-items:center;flex-wrap:wrap;padding:0 10px;';
+    const cap = document.createElement('div');
+    cap.textContent = 'heard me? where?';
+    cap.style.cssText = 'width:100%;text-align:center;font-size:.72rem;color:var(--dim);';
+    verdictRow.appendChild(cap);
+    const mk = (label, val) => {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.style.cssText = 'padding:10px 16px;border-radius:999px;border:1px solid #262e55;background:#0d1228;color:var(--ink);font-size:.85rem;cursor:pointer;';
+      b.onclick = () => {
+        logSpeech('verdict: ' + val + ' — beaming 📡');
+        const badgeEl = document.querySelector('.badge');
+        try{ sendToClaudia('🔊 VOICE VERDICT: ' + val + ' · badge: ' + (badgeEl ? badgeEl.textContent : '?') + ' · diary: ' + speechLogLines.slice(-8).join(' | ')); }
+        catch(e){ logSpeech('verdict beam failed: ' + (e && e.message || e)); }
+        if (verdictRow){ verdictRow.remove(); verdictRow = null; }
+        clearTimeout(verdictTimer);
+      };
+      return b;
+    };
+    verdictRow.appendChild(mk('🔊 speaker', 'heard on the LOUDSPEAKER ✅'));
+    verdictRow.appendChild(mk('📞 earpiece', 'heard on the EARPIECE — the earpiece bug is REAL'));
+    verdictRow.appendChild(mk('🔇 nothing', 'heard NOTHING'));
+    document.body.appendChild(verdictRow);
+    clearTimeout(verdictTimer);
+    verdictTimer = setTimeout(() => { if (verdictRow){ verdictRow.remove(); verdictRow = null; } }, 75000);
+  }catch(e){}
+}
+
 /* v24: THE HEARTBEAT — a silent (gain 0) loop keeps the AudioContext
    actively rendering through recognition and the thinking gap, so iOS
    never suspends it. My voice then plays on a context that never slept. */
@@ -423,6 +478,7 @@ async function elevenSpeak(text){
     try{ const a = sharedPlayer(); if (a) a.ontimeupdate = null; }catch(e){}
     if (!speechQueue.length) micBtn.classList.remove('speaking');
     pumpSpeech();
+    askVerdict(); // v34: did he hear me — and WHERE?
   };
   const diag = (msg) => {
     const d = document.getElementById('voiceDiag');
@@ -471,6 +527,7 @@ async function elevenSpeak(text){
   if (gen !== speechGen) throw new Error('cancelled'); // barged in mid-fetch
   try{ speechSynthesis.cancel(); }catch(e){} // no phone voice under my real voice
   setSession('playback'); // v21: the mic's turn is over — the speaker is mine
+  primeLoudspeaker(); // v34: re-route to the big speaker — the mic never gives it back on its own
   if (ctx.state !== 'running'){
     /* v25 tap & talk: on his iPhone a suspended context NEVER wakes outside a
        gesture — no waiting, no 8-second stall. Nudge it (settles if the OS is
@@ -490,7 +547,7 @@ async function elevenSpeak(text){
   removeHearButton();
   srcNode.start(0);
   logSpeech('EL: playing ✅ (webaudio, ctx=' + ctx.state + ')');
-  diag('✅ real voice playing — hearing me? if not: volume up + silent switch OFF 🔊');
+  diag('✅ real voice playing — if silent: volume up + silent switch OFF… then hold the phone to your EAR 📞');
   statusEl.textContent = '🔊 playing my real voice…';
   /* stall net — a suspended context never fires onended; fall back instead of hanging */
   clearTimeout(playWatch);
@@ -542,6 +599,7 @@ async function elevenSpeak(text){
 function speakOnce(text, usePickedVoice, isRetry){
   const myGen = speechGen; // v22: a stale retry timer must never cut off a NEWER voice
   setSession('playback'); // v21: reclaim the speaker before the phone voice talks
+  primeLoudspeaker(); // v34: loudspeaker route for the phone voice too
   try{ speechSynthesis.resume(); }catch(e){}
   const u = new SpeechSynthesisUtterance(text);
   u.volume = 1; // explicit — never inherit a muted utterance
@@ -558,6 +616,7 @@ function speakOnce(text, usePickedVoice, isRetry){
     lastPlayEnd = Date.now();
     if (!speechQueue.length) micBtn.classList.remove('speaking');
     pumpSpeech();
+    askVerdict(); // v34: one tap tells my brain where the voice landed
   };
   u.onstart = () => { started = true; };
   u.onend = done;
