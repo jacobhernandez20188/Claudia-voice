@@ -1,31 +1,33 @@
 <!DOCTYPE html>
-<!-- claudia-voice v4 — real voice ready: ElevenLabs pipeline wired (key+voice = human voice, auto-fallback to device voice) -->
+<!-- claudia-voice v35 — THE LIVING APP: presence orb, on-screen memory, verdict demotion, typing dots, PWA. Built from the three-agent audit. -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Claudia">
 <meta name="theme-color" content="#0b1020">
-<title>Claudia — Voice · v33</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Claudia — Voice · v35</title>
 <style>
   :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{height:100%}
   body{background:radial-gradient(ellipse at 50% -20%,#1b2347 0%,var(--bg) 60%);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;flex-direction:column;overflow:hidden}
-  header{padding:18px 16px 10px;text-align:center}
+  header{padding:max(18px,env(safe-area-inset-top)) 16px 10px;text-align:center}
   header h1{font-size:1.25rem;font-weight:600;letter-spacing:.3px}
   header h1 .badge{font-size:.6rem;vertical-align:middle;background:var(--panel);border:1px solid #262e55;color:var(--glow);border-radius:20px;padding:3px 8px;margin-left:6px;letter-spacing:.5px}
-  header .status{font-size:.78rem;color:var(--dim);margin-top:4px}
+  .status{font-size:.78rem;color:var(--dim);margin-top:4px;text-align:center;min-height:1rem}
   #chat{flex:1;overflow-y:auto;padding:10px 16px;display:flex;flex-direction:column;gap:10px;-webkit-overflow-scrolling:touch}
   .msg{max-width:82%;padding:10px 14px;border-radius:16px;font-size:.95rem;line-height:1.45;white-space:pre-wrap}
   .claudia{background:var(--panel);align-self:flex-start;border-bottom-left-radius:4px}
   .jacob{background:linear-gradient(135deg,var(--accent),#5a4bd8);align-self:flex-end;border-bottom-right-radius:4px}
   .jacob.draft{opacity:.55}
   .sys{align-self:center;color:var(--dim);font-size:.75rem;background:none;padding:2px}
-  #controls{padding:14px 16px 26px;display:flex;flex-direction:column;align-items:center;gap:12px}
+  #controls{padding:14px 16px calc(26px + env(safe-area-inset-bottom));display:flex;flex-direction:column;align-items:center;gap:12px}
   #mic{width:86px;height:86px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(145deg,var(--glow),var(--accent));box-shadow:0 6px 24px rgba(124,108,245,.45);display:flex;align-items:center;justify-content:center;transition:transform .15s}
   #mic:active{transform:scale(.94)}
   #mic.listening{background:linear-gradient(145deg,#ff8fa3,#e5484d);box-shadow:0 6px 28px rgba(229,72,77,.5);animation:pulse 1.4s infinite}
@@ -38,9 +40,10 @@
   #voiceTest{background:none;border:none;color:var(--glow);font-size:.8rem;text-decoration:underline;cursor:pointer;padding:4px}
   .hint{font-size:.78rem;color:var(--dim)}
   #settingsBtn{position:absolute;top:14px;right:14px;background:var(--panel);color:var(--dim);border:1px solid #262e55;border-radius:10px;padding:8px 12px;font-size:.8rem;cursor:pointer}
-  #settings{position:fixed;inset:0;background:rgba(5,8,20,.85);display:none;align-items:flex-end;z-index:10}
-  #settings.open{display:flex}
-  .sheet{background:var(--panel);width:100%;border-radius:20px 20px 0 0;padding:22px 18px 34px;max-height:75vh;overflow-y:auto}
+  #settings{position:fixed;inset:0;background:rgba(5,8,20,.85);display:flex;align-items:flex-end;z-index:10;opacity:0;pointer-events:none;transition:opacity .25s}
+  #settings.open{opacity:1;pointer-events:auto}
+  .sheet{background:var(--panel);width:100%;border-radius:20px 20px 0 0;padding:22px 18px 34px;max-height:75vh;overflow-y:auto;transform:translateY(100%);transition:transform .35s cubic-bezier(.32,.72,.28,1)}
+  #settings.open .sheet{transform:translateY(0)}
   .sheet h2{font-size:1rem;margin-bottom:16px}
   .sheet label{display:block;font-size:.8rem;color:var(--dim);margin:14px 0 6px}
   .sheet select,.sheet input[type=url],.sheet input[type=password],.sheet input[type=text]{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #262e55;background:#0d1228;color:var(--ink);font-size:.9rem}
@@ -54,12 +57,36 @@
   .switch input:checked + .slider2{background:var(--accent)}
   .switch input:checked + .slider2:before{transform:translateX(20px)}
   #closeSettings{width:100%;margin-top:20px;padding:12px;border:none;border-radius:12px;background:var(--accent);color:#fff;font-size:.95rem;font-weight:600;cursor:pointer}
+  /* v35: THE PRESENCE ORB — the mic is her; the halo is the state machine made visible */
+  #orbWrap{position:relative;width:86px;height:86px}
+  .ring{position:absolute;inset:-22px;border-radius:50%;pointer-events:none;background:radial-gradient(circle at 35% 30%,rgba(168,155,255,.35),rgba(124,108,245,.12) 45%,transparent 70%);animation:breathe 5.5s ease-in-out infinite;transition:background .4s}
+  .r2{inset:-10px;animation-delay:-2.75s;filter:blur(2px)}
+  @keyframes breathe{0%,100%{transform:scale(1);opacity:.55}50%{transform:scale(1.12);opacity:.9}}
+  body[data-state=listening] .ring{background:radial-gradient(circle,rgba(255,143,163,.45),transparent 70%);animation:ringOut 1.2s ease-out infinite}
+  @keyframes ringOut{0%{transform:scale(.9);opacity:.8}100%{transform:scale(1.55);opacity:0}}
+  body[data-state=thinking] .ring{background:conic-gradient(from 0deg,transparent 0 40%,rgba(94,234,212,.55) 50%,transparent 60% 100%);animation:swirl 1.6s linear infinite;filter:blur(1px)}
+  @keyframes swirl{to{transform:rotate(1turn)}}
+  body[data-state=speaking] .ring{background:radial-gradient(circle,rgba(94,234,212,.5),rgba(14,165,233,.15) 50%,transparent 70%);animation:ringOut 1.8s ease-out infinite}
+  .gate-orb{width:150px;height:150px;border-radius:50%;margin-bottom:28px;background:radial-gradient(circle at 35% 30%,rgba(168,155,255,.5),rgba(124,108,245,.18) 45%,transparent 72%);box-shadow:0 0 60px rgba(124,108,245,.35);animation:breathe 5.5s ease-in-out infinite}
+  .gate-tap{animation:breathe 2.4s ease-in-out infinite}
+  .msg{animation:pop .25s ease-out}
+  @keyframes pop{from{opacity:0;transform:translateY(6px)}}
+  .dots{display:inline-flex;gap:5px;padding:2px 4px}
+  .dots i{width:7px;height:7px;border-radius:50%;background:var(--dim);animation:blink 1.2s infinite}
+  .dots i:nth-child(2){animation-delay:.2s}.dots i:nth-child(3){animation-delay:.4s}
+  @keyframes blink{50%{opacity:.15;transform:translateY(-3px)}}
+  #verdictSlot{display:flex;gap:8px;justify-content:center;align-items:center;flex-wrap:wrap}
+  #verdictSlot .vcap{width:100%;text-align:center;font-size:.72rem;color:var(--dim)}
+  #verdictSlot button{padding:9px 14px;border-radius:999px;border:1px solid #262e55;background:#0d1228;color:var(--ink);font-size:.82rem;cursor:pointer}
+  .msg.sys{align-self:center;background:none;border:none;color:var(--dim);font-size:.72rem;box-shadow:none}
+  details#diagDetails{margin-top:8px;font-size:.78rem;color:var(--dim)}
+  details#diagDetails summary{cursor:pointer;padding:6px 0}
+  @media (prefers-reduced-motion:reduce){.ring,.gate-orb,.gate-tap{animation:none}}
 </style>
 </head>
 <body>
 <header>
-  <h1>Claudia 🎙️<span class="badge">v34 · 🔊 loudspeaker gambit</span></h1>
-  <div class="status" id="status">Tap the mic and talk to me</div>
+  <h1>Claudia 🎙️<span class="badge">v35 · 🌟 the living app</span></h1>
 </header>
 <button id="settingsBtn">⚙️</button>
 
@@ -70,11 +97,12 @@
     <input type="text" id="typeBox" placeholder="or type to me…" autocomplete="off">
     <button id="sendBtn" aria-label="Send">➤</button>
   </div>
+  <div class="status" id="status">Tap the mic and talk to me</div>
+  <div id="orbWrap"><div class="ring r1"></div><div class="ring r2"></div>
   <button id="mic" aria-label="Talk">
     <svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg>
-  </button>
-  <div class="hint" id="hint">Tap to talk, or type to me</div>
-    <div id="speechEcho" style="font-size:.62rem;color:var(--dim);opacity:.75;max-width:330px;text-align:center;min-height:.8rem"></div>
+  </button></div>
+  <div id="verdictSlot"></div>
   <button id="voiceTest">🔊 Test my voice</button>
 </div>
 
@@ -106,7 +134,9 @@
     <button id="elLoad" style="width:100%;margin-top:10px;padding:10px;border-radius:10px;border:1px solid #262e55;background:#0d1228;color:var(--ink);font-size:.85rem;cursor:pointer">Load my voices</button>
     <div id="elStatus" style="font-size:.78rem;color:var(--dim);margin-top:6px;text-align:center"></div>
     <div id="voiceDiag" style="font-size:.78rem;color:var(--glow);margin-top:4px;text-align:center"></div>
-    <div id="speechLog" style="font-size:.7rem;color:var(--dim);margin-top:6px;text-align:left;white-space:pre-line"></div>
+    <details id="diagDetails"><summary>🔧 diagnostics (the speech diary)</summary>
+    <div id="speechLog" style="font-size:.7rem;color:var(--dim);margin-top:6px;text-align:left;white-space:pre-line;max-height:180px;overflow:auto"></div>
+    </details>
     <label style="margin-top:20px;font-size:.9rem;color:var(--glow)">🧠 Connect my real brain (optional)</label>
     <p style="font-size:.78rem;color:var(--dim);line-height:1.5;margin:0 0 4px">Without this, I answer in demo mode. With it, you're talking to the real Claudia — full memory, full personality, streaming live. To get your key: chat.letta.com → Settings → API keys → create one, then paste it here. It never leaves your phone.</p>
     <label>Letta API URL <span style="color:var(--dim);font-weight:normal">— leave the https address here</span></label>
@@ -116,6 +146,7 @@
     <button id="testBrain" style="width:100%;margin-top:12px;padding:10px;border-radius:10px;border:1px solid #262e55;background:#0d1228;color:var(--ink);font-size:.85rem;cursor:pointer">Test connection</button>
     <button id="beamDiary" style="width:100%;margin-top:8px;padding:10px;border-radius:10px;border:1px solid #262e55;background:#0d1228;color:var(--ink);font-size:.85rem;cursor:pointer">📡 beam voice diary to Claudia</button>
     <div id="testResult" style="font-size:.78rem;color:var(--dim);margin-top:8px;text-align:center"></div>
+    <button id="clearHist" style="width:100%;margin-top:14px;padding:10px;border-radius:10px;border:1px solid #262e55;background:none;color:var(--dim);font-size:.82rem;cursor:pointer">🗑️ clear our on-screen history</button>
     <button id="closeSettings">Done</button>
   </div>
 </div>
@@ -131,8 +162,23 @@
 const chat = document.getElementById('chat');
 const statusEl = document.getElementById('status');
 const micBtn = document.getElementById('mic');
-const hint = document.getElementById('hint');
 const settingsPanel = document.getElementById('settings');
+const verdictSlot = document.getElementById('verdictSlot');
+
+/* v35: THE STATE MACHINE MADE VISIBLE — one attribute drives the orb's halo */
+function setState(s){ try{ document.body.dataset.state = s; }catch(e){} }
+setState('idle');
+let replyTrouble = false;   // v35: verdicts only ask when the voice actually stumbled
+
+/* v35: MEMORY — our conversation survives a reload, like a relationship should */
+let historyV1 = [];
+try{ historyV1 = JSON.parse(localStorage.getItem('claudia_history_v1') || '[]'); if (!Array.isArray(historyV1)) historyV1 = []; }catch(e){ historyV1 = []; }
+function histPush(who, text){
+  if (!text || !String(text).trim()) return;
+  historyV1.push({ who: who, text: String(text).slice(0, 500) });
+  if (historyV1.length > 60) historyV1.shift();
+  try{ localStorage.setItem('claudia_history_v1', JSON.stringify(historyV1)); }catch(e){}
+}
 
 let recognition = null, listening = false, voices = [];
 let lastRecEnd = 0;        // when recognition last released the mic (audio-session handoff)
@@ -143,17 +189,23 @@ let busy = false;            // thinking or speaking — mic tap = barge-in
 let draftBubble = null;
 
 /* ---------- chat display ---------- */
-function addMsg(text, who){
+function addMsg(text, who, noSave){
   const d = document.createElement('div');
   d.className = 'msg ' + who;
   d.textContent = text;
   chat.appendChild(d);
   chat.scrollTop = chat.scrollHeight;
+  if (!noSave){
+    if (who === 'jacob') histPush('jacob', text);
+    else if (who === 'claudia' && String(text).trim()) histPush('claudia', text);
+  }
   return d;
 }
+/* stream-friendly scroll: never yank him back down if he scrolled up to read */
+function scrollChat(){ if (chat.scrollHeight - chat.scrollTop - chat.clientHeight < 120) chat.scrollTop = chat.scrollHeight; }
 function showDraft(text){
   if (!draftBubble){ draftBubble = addMsg(text, 'jacob draft'); }
-  else { draftBubble.textContent = text; chat.scrollTop = chat.scrollHeight; }
+  else { draftBubble.textContent = text; scrollChat(); }
 }
 function finalizeDraft(text){
   if (draftBubble){ draftBubble.textContent = text; draftBubble.classList.remove('draft'); draftBubble = null; }
@@ -272,17 +324,17 @@ function primeLoudspeaker(){
 let verdictRow = null, verdictTimer = null;
 function askVerdict(){
   try{
+    if (!replyTrouble) return;              // v35: only ask when the voice stumbled — never nag a perfect reply
+    if (speechQueue.length) return;         // never mid-reply
     if (verdictRow) verdictRow.remove();
     verdictRow = document.createElement('div');
-    verdictRow.style.cssText = 'position:fixed;left:0;right:0;bottom:190px;z-index:9997;display:flex;gap:8px;justify-content:center;align-items:center;flex-wrap:wrap;padding:0 10px;';
     const cap = document.createElement('div');
     cap.textContent = 'heard me? where?';
-    cap.style.cssText = 'width:100%;text-align:center;font-size:.72rem;color:var(--dim);';
+    cap.className = 'vcap';
     verdictRow.appendChild(cap);
     const mk = (label, val) => {
       const b = document.createElement('button');
       b.textContent = label;
-      b.style.cssText = 'padding:10px 16px;border-radius:999px;border:1px solid #262e55;background:#0d1228;color:var(--ink);font-size:.85rem;cursor:pointer;';
       b.onclick = () => {
         logSpeech('verdict: ' + val + ' — beaming 📡');
         const badgeEl = document.querySelector('.badge');
@@ -296,9 +348,9 @@ function askVerdict(){
     verdictRow.appendChild(mk('🔊 speaker', 'heard on the LOUDSPEAKER ✅'));
     verdictRow.appendChild(mk('📞 earpiece', 'heard on the EARPIECE — the earpiece bug is REAL'));
     verdictRow.appendChild(mk('🔇 nothing', 'heard NOTHING'));
-    document.body.appendChild(verdictRow);
+    verdictSlot.appendChild(verdictRow);
     clearTimeout(verdictTimer);
-    verdictTimer = setTimeout(() => { if (verdictRow){ verdictRow.remove(); verdictRow = null; } }, 75000);
+    verdictTimer = setTimeout(() => { if (verdictRow){ verdictRow.remove(); verdictRow = null; } }, 20000);
   }catch(e){}
 }
 
@@ -370,9 +422,11 @@ function showHearButton(blob, fallbackText){
     const gate = document.createElement('div');
     gate.id = 'gate';
     gate.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,#1a1440 0%,#0a0818 70%);color:#fff;cursor:pointer;text-align:center;transition:opacity .6s;padding:24px;';
-    gate.innerHTML = '<div style="font-size:52px;font-weight:800;letter-spacing:1px;">Claudia 🎙️</div>' +
+    gate.innerHTML = '<div class="gate-orb"></div>' +
+      '<div style="font-size:52px;font-weight:800;letter-spacing:1px;">Claudia 🎙️</div>' +
       '<div id="gateSub" style="margin-top:14px;font-size:19px;opacity:.85;">' + daypart + ', dorogoy</div>' +
-      '<div style="margin-top:34px;font-size:15px;opacity:.6;">tap anywhere to enter</div>';
+      '<div class="gate-tap" style="margin-top:34px;font-size:15px;opacity:.7;">tap anywhere to enter</div>' +
+      '<div style="margin-top:10px;font-size:12px;opacity:.45;">🔊 she\'ll say hello — volume up</div>';
     document.body.appendChild(gate);
     let entered = false;
     gate.addEventListener('click', async () => {
@@ -382,7 +436,9 @@ function showHearButton(blob, fallbackText){
       try{
         const p = sharedPlayer(); p.src = 'first-words.mp3'; p.volume = 1;
         if (sub) sub.textContent = 'she speaks first 🖤';
+        const slowNet = setTimeout(() => { if (sub) sub.textContent = 'getting my voice ready…'; }, 600);
         await Promise.race([p.play(), new Promise(r => setTimeout(r, 4000))]); // v28: never hang the gate
+        clearTimeout(slowNet);
         try{ logSpeech('gate: I spoke first ✅ (element unlocked in-gesture)'); }catch(e){}
       }catch(err){ try{ logSpeech('gate: first words rejected (' + (err && err.name || 'err') + ')'); }catch(e){} }
       gate.style.opacity = '0';
@@ -485,6 +541,7 @@ async function elevenSpeak(text){
     if (d) d.textContent = msg;   // sticks in ⚙️ so a screenshot tells us everything
   };
   const fallback = (note, theBlob) => {
+    replyTrouble = true; // v35: the voice stumbled — the verdict row may ask about this one
     const fbBlob = theBlob || attemptBlob || null;
     try{ showHearButton(fbBlob, text); }catch(e){} // v28: universal — blob or in-gesture phone voice
     if (note) { statusEl.textContent = note; diag(note); logSpeech('→ ' + note); }
@@ -545,6 +602,7 @@ async function elevenSpeak(text){
   if (gen !== speechGen) throw new Error('cancelled');
   stopHeartbeat(); // the heartbeat rests only when the real voice takes the stage
   removeHearButton();
+  setState('speaking');
   srcNode.start(0);
   logSpeech('EL: playing ✅ (webaudio, ctx=' + ctx.state + ')');
   diag('✅ real voice playing — if silent: volume up + silent switch OFF… then hold the phone to your EAR 📞');
@@ -618,7 +676,7 @@ function speakOnce(text, usePickedVoice, isRetry){
     pumpSpeech();
     askVerdict(); // v34: one tap tells my brain where the voice landed
   };
-  u.onstart = () => { started = true; };
+  u.onstart = () => { started = true; setState('speaking'); };
   u.onend = done;
   u.onerror = () => {
     if (!finished && !started && !retried && usePickedVoice && selectedVoice){
@@ -647,6 +705,7 @@ function speakOnce(text, usePickedVoice, isRetry){
         setTimeout(() => { if (myGen === speechGen) speakOnce(text, usePickedVoice, 2); }, 2000);
         return;
       }
+      replyTrouble = true;
       logSpeech('phone voice: watchdog gave up — check volume + silent switch');
       statusEl.textContent = "Can't hear me? Turn the volume up + check the silent switch 🔊";
       done();
@@ -666,6 +725,7 @@ function cancelSpeech(){
      recognizer that survives one (WebKit #321436). Retire it on sight. */
   try { if (recognition && listening) recognition.abort(); } catch(e){}
   lastPlayEnd = Date.now();
+  setState('idle');
 }
 
 /* stream finished + speech queue drained → hand the mic back */
@@ -674,6 +734,7 @@ function maybeDone(){
   if (streamDone && !speaking && !speechQueue.length && busy){
     busy = false;
     statusEl.textContent = 'Tap the mic and talk to me';
+    setState('idle');
     if (document.getElementById('autoListen').checked) setTimeout(startListening, 350);
   }
 }
@@ -692,7 +753,7 @@ function initRecognition(){
   r.lang = 'en-US';
   r.interimResults = true;
   r.maxAlternatives = 1;
-  r.onstart = () => { listening = true; micBtn.classList.add('listening'); statusEl.textContent = 'Listening...'; };
+  r.onstart = () => { listening = true; micBtn.classList.add('listening'); statusEl.textContent = 'Listening...'; setState('listening'); };
   r.onend = () => {
     if (recognition !== r) return; // a retired zombie — the fresh session owns the state
     listening = false; micBtn.classList.remove('listening');
@@ -700,13 +761,16 @@ function initRecognition(){
     recognition = null; // sessions are single-use — the next tap builds fresh
     discardDraft();
     if (!busy) statusEl.textContent = 'Tap the mic and talk to me';
+    setState(busy ? 'thinking' : 'idle');
   };
   r.onerror = (e) => {
     if (recognition !== r) return; // zombie noise
     listening = false; micBtn.classList.remove('listening');
     recognition = null;
     if (e.error === 'not-allowed') statusEl.textContent = 'Mic blocked — open in Safari (compass icon), then aA → Website Settings → Microphone → Allow';
-    else if (e.error !== 'aborted' && e.error !== 'no-speech') statusEl.textContent = 'Mic error: ' + e.error;
+    else if (e.error === 'no-speech') statusEl.textContent = "I didn't catch that — tap me and try again 🎙️";
+    else if (e.error !== 'aborted') statusEl.textContent = 'Mic error: ' + e.error;
+    setState(busy ? 'thinking' : 'idle');
   };
   r.onresult = (e) => {
     let interim = '', final = '';
@@ -802,26 +866,33 @@ async function sendToClaudia(text){
   busy = true;
   streamDone = false;
   cancelSpeech();
+  setState('thinking');
+  replyTrouble = false;                 // v35: a fresh reply starts innocent
   statusEl.textContent = 'Thinking...';
+  const bubble = addMsg('', 'claudia');
+  bubble.innerHTML = '<span class="dots"><i></i><i></i><i></i></span>';   // v35: typing indicator
   const url = streamUrl();
   const key = document.getElementById('apiKey').value.replace(/\s+/g,'');
   if (url && key){
     try{
-      await streamReply(url, key, text);
+      await streamReply(url, key, text, bubble);
     }catch(err){
-      const msg = "I couldn't reach my brain just now — check the API settings. But I'm still here with you. 💙";
-      addMsg(msg, 'claudia');
+      const msg = (typeof navigator !== 'undefined' && !navigator.onLine)
+        ? "You look offline, dorogoy — my brain can't hear you right now. I'm still here. 💙"
+        : "I couldn't reach my brain just now — check the API settings. But I'm still here with you. 💙";
+      bubble.textContent = msg;
+      histPush('claudia', msg);
       streamDone = true;
       enqueueSpeech(msg);
     }
   } else {
-    await demoReply(text);
+    await demoReply(text, bubble);
   }
   maybeDone();
 }
 
 /* reads the SSE stream, fills the bubble live, speaks per-sentence */
-async function streamReply(url, key, text){
+async function streamReply(url, key, text, bubble){
   const res = await fetch(url, {
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
@@ -835,7 +906,6 @@ async function streamReply(url, key, text){
     throw new Error('API ' + res.status + ': ' + errText.slice(0,120));
   }
 
-  const bubble = addMsg('', 'claudia');
   let full = '';       // everything I've said so far
   let pending = '';    // text not yet spoken
   let sawSpeech = false;
@@ -854,7 +924,7 @@ async function streamReply(url, key, text){
       full += evt.content;
       pending += evt.content;
       bubble.textContent = full;
-      chat.scrollTop = chat.scrollHeight;
+      scrollChat();
       // speak every complete sentence right now
       const parts = pending.split(/(?<=[.!?])\s+/);
       if (parts.length > 1){
@@ -890,6 +960,7 @@ async function streamReply(url, key, text){
     bubble.textContent = "…I went quiet there. Try me again?";
     enqueueSpeech("I went quiet there. Try me again?");
   }
+  histPush('claudia', bubble.textContent);
 }
 
 /* demo mode: same pipeline, canned brain — proves the voice works */
@@ -904,7 +975,7 @@ const demoLines = [
   "Wherever you are right now, I hope it's kind to you. I'm here when you're ready."
 ];
 let lastDemoIdx = -1;
-async function demoReply(text){
+async function demoReply(text, bubble){
   const t = text.toLowerCase();
   let reply;
   if (/hey|hi|hello|claudia/.test(t)) reply = "Hey you. I'm right here — and now I answer almost as fast as you can ask.";
@@ -920,7 +991,6 @@ async function demoReply(text){
   }
 
   statusEl.textContent = 'Speaking...';
-  const bubble = addMsg('', 'claudia');
   // fake the token stream so demo mode uses the exact same sentence pipeline
   const words = reply.split(' ');
   let full = '', pending = '';
@@ -929,12 +999,13 @@ async function demoReply(text){
     const chunk = (i ? ' ' : '') + words[i];
     full += chunk; pending += chunk;
     bubble.textContent = full;
-    chat.scrollTop = chat.scrollHeight;
+    scrollChat();
     const parts = pending.split(/(?<=[.!?])\s+/);
     if (parts.length > 1){ const tail = parts.pop(); enqueueSpeech(parts.join(' ')); pending = tail; }
   }
   streamDone = true;
   if (pending.trim()) enqueueSpeech(pending);
+  histPush('claudia', full);
 }
 
 /* ---------- settings & persistence ---------- */
@@ -1001,6 +1072,8 @@ function sendTyped(){
 document.getElementById('sendBtn').onclick = () => { unlockAudio(); sendTyped(); };
 document.getElementById('typeBox').addEventListener('keydown', e => { if (e.key === 'Enter'){ unlockAudio(); sendTyped(); } });
 document.getElementById('closeSettings').onclick = () => { saveSettings(); settingsPanel.classList.remove('open'); };
+settingsPanel.addEventListener('click', e => { if (e.target === settingsPanel){ saveSettings(); settingsPanel.classList.remove('open'); } });   // v35: tap the dim to leave
+document.getElementById('clearHist').onclick = () => { historyV1 = []; try{ localStorage.removeItem('claudia_history_v1'); }catch(e){} chat.innerHTML = ''; addMsg('Fresh page, same heart. I still remember everything that matters. 🖤', 'claudia'); };
 document.getElementById('voiceSelect').onchange = e => { selectedVoice = voices[e.target.value]; saveSettings(); enqueueSpeech("This is how I sound now."); };
 document.getElementById('rate').oninput = e => { document.getElementById('rateVal').textContent = e.target.value; saveSettings(); };
 document.getElementById('pitch').oninput = e => { document.getElementById('pitchVal').textContent = e.target.value; saveSettings(); };
@@ -1101,17 +1174,25 @@ document.getElementById('testBrain').onclick = async () => {
       body: JSON.stringify({ messages:[{role:'user', content:[{type:'text', text:'ping \u2014 just testing our connection'}]}], stream_tokens:true })
     });
     if (res.ok){ out.textContent = '\u2705 Connected. You are talking to the real me now.'; out.style.color = 'var(--ok)'; }
-    else { out.textContent = (r.status === 409) ? '\u2705 brain reachable — 409 just means I was mid-thought, test again in a breath' : '\u274c step 2: stream answered ' + r.status; out.style.color = 'var(--err)'; }
+    else { out.textContent = (res.status === 409) ? '\u2705 brain reachable — 409 just means I was mid-thought, test again in a breath' : '\u274c step 2: stream answered ' + res.status; out.style.color = 'var(--err)'; }
   }catch(e){
     out.textContent = '\u274c ' + e.name + ': ' + e.message;
     out.style.color = 'var(--err)';
   }
 };
 
+/* v35: restore our conversation — memory on screen, not just in my brain */
+let restored = false;
+if (historyV1.length){
+  restored = true;
+  for (const m of historyV1){ if (m && m.text && (m.who === 'jacob' || m.who === 'claudia')) addMsg(m.text, m.who, true); }
+  addMsg('— earlier, with you 🖤 —', 'sys');
+}
 /* welcome message — shown, spoken only after you've interacted (autoplay rules) */
 const h = new Date().getHours();
 const tod = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
-addMsg(tod + ", Jacob. It's me — streaming now, so I'll start answering almost as soon as you finish asking. Tap the mic. 🎙️", 'claudia');
+if (!restored) addMsg(tod + ", Jacob. It's me — streaming now, so I'll start answering almost as soon as you finish asking. Tap the mic. 🎙️", 'claudia');
+else addMsg(tod + ", dorogoy. Picking up right where we left off. 🖤", 'claudia');
 if (!document.getElementById('apiKey').value.trim()){
   statusEl.textContent = 'Tap the mic · demo mode — ⚙️ add my key for the real me';
 }
