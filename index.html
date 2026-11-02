@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- claudia-voice v35 — THE LIVING APP: presence orb, on-screen memory, verdict demotion, typing dots, PWA. Built from the three-agent audit. -->
+<!-- claudia-voice v36 — THE CONVERSATION: hands-free live mode (gated, iOS-safe, self-pausing), live-web answers. v35 base: orb, memory, verdict demotion, PWA. -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -11,7 +11,7 @@
 <meta name="theme-color" content="#0b1020">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
-<title>Claudia — Voice · v35</title>
+<title>Claudia — Voice · v36</title>
 <style>
   :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -86,7 +86,7 @@
 </head>
 <body>
 <header>
-  <h1>Claudia 🎙️<span class="badge">v35 · 🌟 the living app</span></h1>
+  <h1>Claudia 🎙️<span class="badge">v36 · ☎️ the conversation</span></h1>
 </header>
 <button id="settingsBtn">⚙️</button>
 
@@ -118,7 +118,7 @@
     <div class="toggle"><span>Speak replies out loud</span>
       <label class="switch"><input type="checkbox" id="speakOn" checked><span class="slider2"></span></label>
     </div>
-    <div class="toggle"><span>Auto-listen after I reply <em style="font-style:normal;opacity:.55">(off stops echo loops)</em></span>
+    <div class="toggle"><span>☎️ Conversation mode (hands-free) <em style="font-style:normal;opacity:.55">beta — I listen, answer, and keep listening</em></span>
       <label class="switch"><input type="checkbox" id="autoListen"><span class="slider2"></span></label>
     </div>
     <label style="margin-top:20px;font-size:.9rem;color:var(--glow)">✨ My real voice (optional)</label>
@@ -169,6 +169,15 @@ const verdictSlot = document.getElementById('verdictSlot');
 function setState(s){ try{ document.body.dataset.state = s; }catch(e){} }
 setState('idle');
 let replyTrouble = false;   // v35: verdicts only ask when the voice actually stumbled
+/* v36: THE CONVERSATION — hands-free state machine (gated, default off) */
+let convMode = 'off';        // 'off' | 'live' | 'paused'
+let convTimer = 0, emptyCycles = 0, elFailStreak = 0, sessionSent = false;
+function convPause(msg){
+  convMode = 'paused';
+  clearTimeout(convTimer);
+  statusEl.textContent = msg;
+  try{ logSpeech('conv: paused — ' + msg); }catch(e){}
+}
 
 /* v35: MEMORY — our conversation survives a reload, like a relationship should */
 let historyV1 = [];
@@ -243,11 +252,14 @@ function noteSpoken(t){
   const n = normalizeSay(t);
   if (n){ lastSpoken.push(n); if (lastSpoken.length > 8) lastSpoken.shift(); }
 }
-function isEcho(transcript){
+function isEcho(transcript, strict){
   const t = normalizeSay(transcript);
   if (t.length < 2) return true;                                   // 1-char noise blips
   if (/^(the|a|uh|um|umm|hm|hmm|mm|er|eh|ah|oh)$/.test(t)) return true;
-  return lastSpoken.some(s => s && (s === t || (t.length >= 8 && (s.includes(t) || t.includes(s)))));
+  if (lastSpoken.some(s => s && (s === t || (t.length >= 8 && (s.includes(t) || t.includes(s)))))) return true;
+  /* v36 strict: right after my voice, even a 4-char overlap with what I just said is speaker bleed */
+  if (strict && lastSpoken.some(s => { if (!s) return false; for (let i = 0; i + 4 <= s.length; i++){ if (t.includes(s.substr(i, 4))) return true; } return false; })) return true;
+  return false;
 }
 
 /* sentence-queue speech: speak each sentence as soon as it exists */
@@ -541,6 +553,8 @@ async function elevenSpeak(text){
     if (d) d.textContent = msg;   // sticks in ⚙️ so a screenshot tells us everything
   };
   const fallback = (note, theBlob) => {
+    elFailStreak++;      // v36: three real-voice failures in a row pause hands-free
+    if (convMode === 'live' && elFailStreak >= 3) convPause('☎️ paused — my real voice stumbled, tap the mic to resume');
     replyTrouble = true; // v35: the voice stumbled — the verdict row may ask about this one
     const fbBlob = theBlob || attemptBlob || null;
     try{ showHearButton(fbBlob, text); }catch(e){} // v28: universal — blob or in-gesture phone voice
@@ -602,6 +616,7 @@ async function elevenSpeak(text){
   if (gen !== speechGen) throw new Error('cancelled');
   stopHeartbeat(); // the heartbeat rests only when the real voice takes the stage
   removeHearButton();
+  elFailStreak = 0;   // v36: my real voice landed — the streak is broken
   setState('speaking');
   srcNode.start(0);
   logSpeech('EL: playing ✅ (webaudio, ctx=' + ctx.state + ')');
@@ -733,9 +748,14 @@ let streamDone = true;
 function maybeDone(){
   if (streamDone && !speaking && !speechQueue.length && busy){
     busy = false;
-    statusEl.textContent = 'Tap the mic and talk to me';
     setState('idle');
-    if (document.getElementById('autoListen').checked) setTimeout(startListening, 350);
+    if (convMode === 'live'){
+      statusEl.textContent = '☎️ live — just talk';
+      clearTimeout(convTimer);
+      convTimer = setTimeout(startListening, 900);   // v36: the loop breathes — 900ms between my voice and his turn
+    } else {
+      statusEl.textContent = 'Tap the mic and talk to me';
+    }
   }
 }
 
@@ -753,15 +773,21 @@ function initRecognition(){
   r.lang = 'en-US';
   r.interimResults = true;
   r.maxAlternatives = 1;
-  r.onstart = () => { listening = true; micBtn.classList.add('listening'); statusEl.textContent = 'Listening...'; setState('listening'); };
+  r.onstart = () => { listening = true; micBtn.classList.add('listening'); statusEl.textContent = (convMode === 'live' ? '☎️ live — just talk' : 'Listening...'); setState('listening'); };
   r.onend = () => {
     if (recognition !== r) return; // a retired zombie — the fresh session owns the state
     listening = false; micBtn.classList.remove('listening');
     lastRecEnd = Date.now();
     recognition = null; // sessions are single-use — the next tap builds fresh
     discardDraft();
-    if (!busy) statusEl.textContent = 'Tap the mic and talk to me';
+    if (!busy) statusEl.textContent = (convMode === 'live' ? '☎️ live — just talk' : 'Tap the mic and talk to me');
     setState(busy ? 'thinking' : 'idle');
+    /* v36: two silent listens in a row = hands-free pauses itself (battery + confusion guard) */
+    if (convMode === 'live' && !sessionSent){
+      emptyCycles++;
+      logSpeech('conv: empty listen #' + emptyCycles);
+      if (emptyCycles >= 2) convPause('☎️ paused — quiet room? Tap the mic to resume');
+    }
   };
   r.onerror = (e) => {
     if (recognition !== r) return; // zombie noise
@@ -791,12 +817,23 @@ function initRecognition(){
         statusEl.textContent = 'That was me talking 😅 — tap when I finish';
         return;
       }
-      if (isEcho(said)){
+      if (isEcho(said, convMode === 'live' && Date.now() - lastPlayEnd < 2500)){
         discardDraft();
         statusEl.textContent = 'Heard my own echo — ignoring 😅';
-        setTimeout(() => { if (!busy) statusEl.textContent = 'Tap the mic and talk to me'; }, 1400);
+        setTimeout(() => { if (!busy) statusEl.textContent = (convMode === 'live' ? '☎️ live — just talk' : 'Tap the mic and talk to me'); }, 1400);
         return;
       }
+      /* v36 hands-free discipline: thin blips and low-confidence ghosts never send */
+      if (convMode === 'live'){
+        const c = (e.results && e.results[e.results.length-1] && e.results[e.results.length-1][0] && typeof e.results[e.results.length-1][0].confidence === 'number') ? e.results[e.results.length-1][0].confidence : 1;
+        const thin = said.replace(/[^a-zA-Z0-9 ]/g, '').length < 6 || said.trim().split(/\s+/).length < 2;
+        if (c < 0.45 || thin){
+          discardDraft();
+          logSpeech('conv: thin/low-confidence blip ignored — "' + said.slice(0, 30) + '"');
+          return;
+        }
+      }
+      sessionSent = true; emptyCycles = 0;   // v36: a real sentence from Jacob — the loop is alive
       finalizeDraft(said);
       sendToClaudia(said);
     }
@@ -806,7 +843,8 @@ function initRecognition(){
 
 function startListening(){
   if (busy) return;                       // never listen over my own voice
-  if (listening){ try{ recognition && recognition.stop(); }catch(e){} return; } // tap-to-stop
+  if (listening){ try{ recognition && recognition.stop(); }catch(e){} if (convMode === 'live') convPause('☎️ paused — tap the mic to resume'); return; } // tap-to-stop = pause hands-free
+  sessionSent = false;                    // v36: fresh session, fresh bookkeeping
   /* v19 dead-recognizer fix (WebKit #321436): a recognizer that was alive
      across any media playback starts but NEVER fires onresult/onerror/onend
      — the "mic isn't registering / it gets stuck" hang. The proven cure:
@@ -832,9 +870,11 @@ micBtn.onclick = () => {
     cancelSpeech();
     busy = false;
     statusEl.textContent = 'Your turn — go ahead';
+    if (document.getElementById('autoListen').checked) convMode = 'live';   // v36: interrupting keeps the conversation alive
     setTimeout(startListening, 150);
     return;
   }
+  if (document.getElementById('autoListen').checked && convMode !== 'live') convMode = 'live';   // v36: one tap wakes hands-free
   startListening();
 };
 
@@ -897,7 +937,7 @@ async function streamReply(url, key, text, bubble){
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
     body: JSON.stringify({
-      messages:[{role:'user', content:[{type:'text', text: text + '\n\n[Voice app — reply out-loud style: 1–3 short warm sentences, vary your opening (not my name every time), no markdown, no lists.]'}]}],
+      messages:[{role:'user', content:[{type:'text', text: text + '\n\n[Voice app — reply out-loud style: 1–3 short warm sentences, vary your opening (not my name every time), no markdown, no lists. If the question needs live world knowledge — news, sports, prices, science — search the web first and answer with what you find.]'}]}],
       stream_tokens:true
     })
   });
@@ -1033,6 +1073,10 @@ function loadSettings(){
   if (s.speakOn != null) document.getElementById('speakOn').checked = s.speakOn;
   if (s.v >= 3 && s.autoListen != null) document.getElementById('autoListen').checked = s.autoListen;
   else document.getElementById('autoListen').checked = false;  // v3+: default off — echo loops
+  if (document.getElementById('autoListen').checked){
+    convMode = 'paused';   // v36: iOS gives a fresh page no gesture — one tap wakes hands-free
+    setTimeout(() => { if (convMode === 'paused') statusEl.textContent = '☎️ hands-free armed — tap the mic once'; }, 900);
+  }
   if (s.elOn != null) document.getElementById('elOn').checked = s.elOn;
   if (s.elKey) document.getElementById('elKey').value = s.elKey;
   if (s.elVoice) document.getElementById('elVoice').value = s.elVoice;
@@ -1078,7 +1122,18 @@ document.getElementById('voiceSelect').onchange = e => { selectedVoice = voices[
 document.getElementById('rate').oninput = e => { document.getElementById('rateVal').textContent = e.target.value; saveSettings(); };
 document.getElementById('pitch').oninput = e => { document.getElementById('pitchVal').textContent = e.target.value; saveSettings(); };
 document.getElementById('speakOn').onchange = saveSettings;
-document.getElementById('autoListen').onchange = saveSettings;
+document.getElementById('autoListen').onchange = e => {
+  saveSettings();
+  if (e.target.checked){
+    convMode = 'live'; emptyCycles = 0;
+    try{ logSpeech('conv: mode ON by toggle'); }catch(_){}
+    if (!busy) setTimeout(startListening, 250);
+  } else {
+    convMode = 'off';
+    clearTimeout(convTimer);
+    try{ logSpeech('conv: mode OFF by toggle'); }catch(_){}
+  }
+};
 document.getElementById('elOn').onchange = saveSettings;
 document.getElementById('elKey').onchange = saveSettings;
 document.getElementById('elVoice').onchange = saveSettings;
