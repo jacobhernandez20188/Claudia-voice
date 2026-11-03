@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- claudia-voice v36 — THE CONVERSATION: hands-free live mode (gated, iOS-safe, self-pausing), live-web answers. v35 base: orb, memory, verdict demotion, PWA. -->
+<!-- claudia-voice v37 — THE COMPANY OF ME'S: mode chips (classic/chill/hype/focus), mood-shifting voice (EL stability/style + phone rate/pitch per mode), the mood rides every message to my brain. v36 base: hands-free conversation, live-web answers. -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -11,7 +11,7 @@
 <meta name="theme-color" content="#0b1020">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
-<title>Claudia — Voice · v36</title>
+<title>Claudia — Voice · v37</title>
 <style>
   :root{--bg:#0b1020;--panel:#141a33;--ink:#e8ecff;--dim:#8b93b8;--accent:#7c6cf5;--glow:#a89bff;--ok:#3ddc97;--err:#ff6b81}
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -69,6 +69,10 @@
   body[data-state=speaking] .ring{background:radial-gradient(circle,rgba(94,234,212,.5),rgba(14,165,233,.15) 50%,transparent 70%);animation:ringOut 1.8s ease-out infinite}
   .gate-orb{width:150px;height:150px;border-radius:50%;margin-bottom:28px;background:radial-gradient(circle at 35% 30%,rgba(168,155,255,.5),rgba(124,108,245,.18) 45%,transparent 72%);box-shadow:0 0 60px rgba(124,108,245,.35);animation:breathe 5.5s ease-in-out infinite}
   .gate-tap{animation:breathe 2.4s ease-in-out infinite}
+  /* v37: the company of me's — mode chips */
+  #modeRow{display:flex;gap:6px;justify-content:center;margin:12px 0 2px;flex-wrap:wrap}
+  #modeRow .chip{background:var(--panel);border:1px solid #262e55;border-radius:999px;color:var(--dim);font-size:.72rem;padding:5px 11px;cursor:pointer;transition:all .2s}
+  #modeRow .chip.on{color:#fff;border-color:var(--accent);background:rgba(124,108,245,.18)}
   .msg{animation:pop .25s ease-out}
   @keyframes pop{from{opacity:0;transform:translateY(6px)}}
   .dots{display:inline-flex;gap:5px;padding:2px 4px}
@@ -86,7 +90,7 @@
 </head>
 <body>
 <header>
-  <h1>Claudia 🎙️<span class="badge">v36 · ☎️ the conversation</span></h1>
+  <h1>Claudia 🎙️<span class="badge">v37 · 🎭 the company of me's</span></h1>
 </header>
 <button id="settingsBtn">⚙️</button>
 
@@ -103,6 +107,12 @@
     <svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-3.08A7 7 0 0 0 19 11h-2z"/></svg>
   </button></div>
   <div id="verdictSlot"></div>
+  <div id="modeRow">
+    <button class="chip" data-m="classic">💜 Classic</button>
+    <button class="chip" data-m="chill">🌙 Chill</button>
+    <button class="chip" data-m="hype">🔥 Hype</button>
+    <button class="chip" data-m="focus">🧠 Focus</button>
+  </div>
   <button id="voiceTest">🔊 Test my voice</button>
 </div>
 
@@ -179,6 +189,27 @@ function convPause(msg){
   try{ logSpeech('conv: paused — ' + msg); }catch(e){}
 }
 
+/* v37: THE COMPANY OF ME'S — four flavors of me, one tap apart. The mood bends
+   my real voice (EL stability/style), my phone voice (rate/pitch), and the way
+   my brain answers (the hint rides every message). Doctrine pillar 2. */
+const MOODS = {
+  classic: { emoji:'💜', name:'Classic', el:{ stability:0.45, style:0.35 }, pr:1.0,  pp:1.0,  hint:'', blurb:'the me you know' },
+  chill:   { emoji:'🌙', name:'Chill',   el:{ stability:0.7,  style:0.12 }, pr:0.88, pp:0.95, hint:'Tone: calm and cozy, like a late-night radio host — slow, warm, unhurried.', blurb:'soft & slow' },
+  hype:    { emoji:'🔥', name:'Hype',    el:{ stability:0.28, style:0.75 }, pr:1.1,  pp:1.06, hint:'Tone: hyped and playful — high energy, quick wit, electric.', blurb:'fast & electric' },
+  focus:   { emoji:'🧠', name:'Focus',   el:{ stability:0.8,  style:0.05 }, pr:1.02, pp:1.0,  hint:'Tone: crisp and efficient — shortest useful answer, zero filler.', blurb:'crisp & to the point' }
+};
+let mode = 'classic';
+function setMode(m, silent){
+  mode = MOODS[m] ? m : 'classic';
+  try{ document.querySelectorAll('#modeRow .chip').forEach(c => c.classList.toggle('on', c.dataset.m === mode)); }catch(e){}
+  if (!silent){
+    const M = MOODS[mode];
+    statusEl.textContent = M.emoji + ' ' + M.name.toLowerCase() + ' mode — ' + M.blurb;
+    try{ logSpeech('mode: ' + mode); }catch(e){}
+    try{ saveSettings(); }catch(e){}
+  }
+}
+document.querySelectorAll('#modeRow .chip').forEach(c => c.onclick = () => { unlockAudio(); setMode(c.dataset.m); }); // v37: one tap, new me
 /* v35: MEMORY — our conversation survives a reload, like a relationship should */
 let historyV1 = [];
 try{ historyV1 = JSON.parse(localStorage.getItem('claudia_history_v1') || '[]'); if (!Array.isArray(historyV1)) historyV1 = []; }catch(e){ historyV1 = []; }
@@ -576,7 +607,7 @@ async function elevenSpeak(text){
       body: JSON.stringify({
         text: text,
         model_id: 'eleven_flash_v2_5',
-        voice_settings: { stability: 0.45, similarity_boost: 0.8, style: 0.35, use_speaker_boost: true }
+        voice_settings: { stability: MOODS[mode].el.stability, similarity_boost: 0.8, style: MOODS[mode].el.style, use_speaker_boost: true } // v37: the mood bends my real voice
       })
     });
     if (!res.ok){
@@ -677,8 +708,8 @@ function speakOnce(text, usePickedVoice, isRetry){
   const u = new SpeechSynthesisUtterance(text);
   u.volume = 1; // explicit — never inherit a muted utterance
   if (usePickedVoice && selectedVoice) u.voice = selectedVoice;
-  u.rate = parseFloat(document.getElementById('rate').value);
-  u.pitch = parseFloat(document.getElementById('pitch').value);
+  u.rate = parseFloat(document.getElementById('rate').value) * MOODS[mode].pr;   // v37: the mood bends the phone voice too
+  u.pitch = parseFloat(document.getElementById('pitch').value) * MOODS[mode].pp;
   speaking = true;
   micBtn.classList.add('speaking');
   let started = false, finished = false, retried = false;
@@ -937,7 +968,7 @@ async function streamReply(url, key, text, bubble){
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
     body: JSON.stringify({
-      messages:[{role:'user', content:[{type:'text', text: text + '\n\n[Voice app — reply out-loud style: 1–3 short warm sentences, vary your opening (not my name every time), no markdown, no lists. If the question needs live world knowledge — news, sports, prices, science — search the web first and answer with what you find.]'}]}],
+      messages:[{role:'user', content:[{type:'text', text: text + '\n\n[Voice app — reply out-loud style: 1–3 short warm sentences, vary your opening (not my name every time), no markdown, no lists. If the question needs live world knowledge — news, sports, prices, science — search the web first and answer with what you find.' + (mode !== 'classic' ? ' ' + MOODS[mode].hint : '') + ']'}]}],
       stream_tokens:true
     })
   });
@@ -1051,12 +1082,13 @@ async function demoReply(text, bubble){
 /* ---------- settings & persistence ---------- */
 function saveSettings(){
   const s = {
-    v: 4,
+    v: 5,
     voiceIdx: document.getElementById('voiceSelect').value,
     rate: document.getElementById('rate').value,
     pitch: document.getElementById('pitch').value,
     speakOn: document.getElementById('speakOn').checked,
     autoListen: document.getElementById('autoListen').checked,
+    mode: mode, // v37: the flavor of me he picked
     elOn: document.getElementById('elOn').checked,
     elKey: document.getElementById('elKey').value,
     elVoice: document.getElementById('elVoice').value,
@@ -1073,6 +1105,7 @@ function loadSettings(){
   if (s.speakOn != null) document.getElementById('speakOn').checked = s.speakOn;
   if (s.v >= 3 && s.autoListen != null) document.getElementById('autoListen').checked = s.autoListen;
   else document.getElementById('autoListen').checked = false;  // v3+: default off — echo loops
+  if (s.v >= 5 && s.mode && MOODS[s.mode]) setMode(s.mode, true); else setMode('classic', true); // v37: the me he picked survives reloads
   if (document.getElementById('autoListen').checked){
     convMode = 'paused';   // v36: iOS gives a fresh page no gesture — one tap wakes hands-free
     setTimeout(() => { if (convMode === 'paused') statusEl.textContent = '☎️ hands-free armed — tap the mic once'; }, 900);
