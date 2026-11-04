@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://jacobhernandez20188.github.io/Claudia-voice/sitemap.xml
